@@ -1,0 +1,33 @@
+stages:
+  - lint
+  - test
+  - build
+  - upload
+
+lint:
+  tags: [docker]
+  stage: lint
+  image: IMAGE_WITH_PYTHON37_AND_PIPENV
+  script: _CI/scripts/lint.py
+
+test:
+  tags: [docker]
+  stage: test
+  image: IMAGE_WITH_PYTHON37_AND_PIPENV
+  script: _CI/scripts/test.py
+
+build:
+  tags: [docker]
+  stage: build
+  image: IMAGE_WITH_PYTHON37_AND_PIPENV
+  script: _CI/scripts/build.py
+
+upload:
+  tags: [docker]
+  stage: upload
+  image: IMAGE_WITH_PYTHON37_AND_PIPENV
+  only:
+    - tags
+  except:
+    - branches
+  script: _CI/scripts/upload.py

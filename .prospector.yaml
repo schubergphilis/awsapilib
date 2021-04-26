@@ -1,0 +1,13 @@
+pep257:
+  disable:
+    - D203
+    - D212
+    - D107
+    - D105
+    - D213
+    - D406
+    - D407
+ignore-paths:
+  - _CI
+  - build
+  - docs
