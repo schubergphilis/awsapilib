@@ -994,7 +994,16 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                       'TemplateName': 'AWSControlTowerConfigAggregatorRole'}
         return self._create_system_role(parameters)
 
-    def deploy(self, logging_account_email, security_account_email, regions=None, retries=10, wait=1):  # pylint: disable=too-many-arguments
+    def deploy(self,  # pylint: disable=too-many-arguments,too-many-locals
+               logging_account_email,
+               security_account_email,
+               logging_account_name='Log Archive',
+               security_account_name='Audit',
+               core_ou_name='Security',
+               custom_ou_name='Sandbox',
+               regions=None,
+               retries=10,
+               wait=1):
         """Deploys control tower.
 
         Returns:
@@ -1022,10 +1031,24 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             raise RoleCreationFailure('Unable to create required roles AWSControlTowerAdmin, '
                                       'AWSControlTowerCloudTrailRole, AWSControlTowerStackSetRole, '
                                       'AWSControlTowerConfigAggregatorRole, manual cleanup is required.')
-        payload = self._get_api_payload(content_string={'HomeRegion': self.region,
+        accounts = [{'Accounts': [{'AccountEmail': logging_account_email,
+                                   'AccountName': logging_account_name,
+                                   'AccountType': 'LOGGING'},
+                                  {'AccountEmail': security_account_email,
+                                   'AccountName': security_account_name,
+                                   'AccountType': 'SECURITY'}],
+                     'OrganizationalUnitName': core_ou_name,
+                     'OrganizationalUnitType': 'CORE'},
+                    {'OrganizationalUnitName': custom_ou_name,
+                     'OrganizationalUnitType': 'CUSTOM'}]
+        configuration = {'OrganizationStructure': accounts,
+                         'RegionConfigurationList': region_list}
+        payload = self._get_api_payload(content_string={'Configuration': configuration,
+                                                        'HomeRegion': self.region,
                                                         'LogAccountEmail': logging_account_email,
                                                         'SecurityAccountEmail': security_account_email,
-                                                        'RegionConfigurationList': region_list},
+                                                        'RegionConfigurationList': region_list,
+                                                        'SetupLandingZoneActionType': 'CREATE'},
                                         target='setupLandingZone')
         self.logger.debug('Trying to deploy control tower with payload "%s"', payload)
         return self._deploy(payload, retries, wait)
