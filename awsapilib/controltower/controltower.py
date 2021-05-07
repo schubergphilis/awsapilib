@@ -734,6 +734,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                                 {'Key': 'ManagedOrganizationalUnit',
                                                  'Value': organizational_unit}]}
         try:
+            while self.busy:
+                time.sleep(1)
             response = self.service_catalog.provision_product(**arguments)
         except botocore.exceptions.ClientError as err:
             if CREATING_ACCOUNT_ERROR_MESSAGE in err.response['Error']['Message']:
