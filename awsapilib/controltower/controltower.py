@@ -105,7 +105,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                          'getGuardrailComplianceStatus',
                          'describeAccountFactoryConfig',
                          'performPreLaunchChecks',
-                         'deleteLandingZone'
+                         'deleteLandingZone',
                          ]
     core_account_types = ['PRIMARY', 'LOGGING', 'SECURITY']
 
@@ -438,10 +438,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     def _register_org_ou_in_control_tower(self, org_ou):
         self.logger.debug('Trying to move management of OU under Control Tower')
         payload = self._get_api_payload(content_string={'OrganizationalUnitId': org_ou.id,
-                                                        'OrganizationalUnitName': org_ou.name,
-                                                        'ParentOrganizationalUnitId': self.root_ou.id,
-                                                        'ParentOrganizationalUnitName': self.root_ou.name,
-                                                        'OrganizationalUnitType': 'CUSTOM'},
+                                                        'OrganizationalUnitName': org_ou.name},
                                         target='manageOrganizationalUnit')
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -449,10 +446,21 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                               'and response text "%s"',
                               org_ou.name, response.status_code, response.text)
             return False
-        self.logger.debug('Giving %s seconds time for the guardrails to be applied', self.settling_time)
-        time.sleep(self.settling_time)
         self.logger.debug('Successfully moved management of OU "%s" under Control Tower', org_ou.name)
-        return response.ok
+        return True
+
+    def _is_busy_with_ou_guardrails(self):
+        """The status of guardrails application for OUs in control tower."""
+        payload = self._get_api_payload(content_string={'OrganizationUnitStatus': 'IN_PROGRESS'},
+                                        target='listManagedOrganizationalUnits')
+        self.logger.debug('Trying to get the status of OU guardrails application with payload "%s"', payload)
+        response = self.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error('Failed to get the status OU guardrails application with response status '
+                              '"%s" and response text "%s"',
+                              response.status_code, response.text)
+            raise ServiceCallFailed(payload)
+        return bool(response.json().get('ManagedOrganizationalUnitList'))
 
     @validate_availability
     def delete_organizational_unit(self, name):
@@ -804,7 +812,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         """Busy."""
         return any([self.status == 'IN_PROGRESS',
                     self.status == 'DELETE_IN_PROGRESS',
-                    self.get_changing_accounts()])
+                    self.get_changing_accounts(),
+                    self._is_busy_with_ou_guardrails()])
 
     @property
     def status(self):

@@ -539,6 +539,11 @@ class ControlTowerOU:
         return self._data.get('OrganizationalUnitName')
 
     @property
+    def status(self):
+        """The status of the OU."""
+        return self._data.get('OrganizationalUnitStatus')
+
+    @property
     def type(self):
         """The type of the OU."""
         return self._data.get('OrganizationalUnitType')
