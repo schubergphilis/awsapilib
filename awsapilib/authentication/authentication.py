@@ -135,6 +135,16 @@ class Urls:
         return f'{self.scheme}{self.region}.console.{self.root_domain}/singlesignon'
 
     @property
+    def regional_control_tower(self):
+        """The url of the regional control tower service.
+
+        Returns:
+            regional_control_tower (str): The regional control tower on url.
+
+        """
+        return f'{self.scheme}{self.region}.console.{self.root_domain}/controltower'
+
+    @property
     def regional_relay_state(self):
         """The regional relay state url.
 
@@ -238,11 +248,13 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
             return response.json().get('SigninToken')
         raise NoSigninTokenReceived(response.status_code, response.text)
 
-    def get_signed_url(self, domain='Example.com'):
+    def get_signed_url(self, domain='Example.com', destination=None):
         """Returns a pre signed url that is authenticated.
 
         Args:
             domain (str): The domain to request the session as.
+            destination (str): The service to redirect to after successful redirection.
+
 
         Returns:
             url (str): An authenticated pre signed url.
@@ -250,7 +262,7 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
         """
         params = {'Action': 'login',
                   'Issuer': domain,
-                  'Destination': self.urls.console,
+                  'Destination': destination or self.urls.console,
                   'SigninToken': self._get_signin_token()}
         return f'{self.urls.federation}?{urllib.parse.urlencode(params)}'
 
