@@ -65,4 +65,4 @@ Instead use the provided build and upload scripts that create all the necessary 
 Project Features
 ================
 
-* TODO
+* Please look into the usage files.
