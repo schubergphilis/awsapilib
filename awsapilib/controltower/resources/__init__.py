@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # File: __init__.py
 #
-# Copyright 2021 Costas Tyfoxylos
+# Copyright 2020 Costas Tyfoxylos
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 #  of this software and associated documentation files (the "Software"), to
@@ -24,33 +24,45 @@
 #
 
 """
-awsapilib package.
+configuration module.
 
-Import all parts from awsapilib here
+Import all parts from configuration here
 
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
 """
-from ._version import __version__
-from .authentication import LoggerMixin, Authenticator
-from .controltower import ControlTower
-from .billing import Billing
-from .sso import Sso
+
+from .configuration import (LOGGER,
+                            LOGGER_BASENAME,
+                            CREATING_ACCOUNT_ERROR_MESSAGE)
+
+from .resources import (CoreAccount,
+                        ControlTowerAccount,
+                        ServiceControlPolicy,
+                        ControlTowerOU,
+                        AccountFactory,
+                        OrganizationsOU,
+                        GuardRail)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
-__date__ = '''26-04-2021'''
-__copyright__ = '''Copyright 2021, Costas Tyfoxylos'''
+__date__ = '''18-02-2020'''
+__copyright__ = '''Copyright 2020, Costas Tyfoxylos'''
 __license__ = '''MIT'''
 __maintainer__ = '''Costas Tyfoxylos'''
 __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is to 'use' the module(s), so lint doesn't complain
-assert __version__
 
-assert LoggerMixin
-assert Authenticator
-assert ControlTower
-assert Billing
-assert Sso
+assert LOGGER
+assert LOGGER_BASENAME
+assert CREATING_ACCOUNT_ERROR_MESSAGE
+
+assert CoreAccount
+assert ControlTowerAccount
+assert ControlTowerOU
+assert AccountFactory
+assert ServiceControlPolicy
+assert GuardRail
+assert OrganizationsOU

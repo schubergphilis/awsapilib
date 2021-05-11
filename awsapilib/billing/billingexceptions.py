@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# File: __init__.py
+# File: billingexceptions.py
 #
 # Copyright 2021 Costas Tyfoxylos
 #
@@ -24,33 +24,39 @@
 #
 
 """
-awsapilib package.
-
-Import all parts from awsapilib here
+Custom exception code for billing.
 
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
+
 """
-from ._version import __version__
-from .authentication import LoggerMixin, Authenticator
-from .controltower import ControlTower
-from .billing import Billing
-from .sso import Sso
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
-__date__ = '''26-04-2021'''
+__date__ = '''30-03-2021'''
 __copyright__ = '''Copyright 2021, Costas Tyfoxylos'''
+__credits__ = ["Costas Tyfoxylos"]
 __license__ = '''MIT'''
 __maintainer__ = '''Costas Tyfoxylos'''
 __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
-# This is to 'use' the module(s), so lint doesn't complain
-assert __version__
 
-assert LoggerMixin
-assert Authenticator
-assert ControlTower
-assert Billing
-assert Sso
+class NonEditableSetting(Exception):
+    """The setting is not editable, or time disabled."""
+
+
+class InvalidCurrency(Exception):
+    """The currency provided is not a valid value."""
+
+
+class ServerError(Exception):
+    """The response was not successful."""
+
+
+class IAMAccessDenied(Exception):
+    """IAM User and Role Access to Billing Information on the account console is not set."""
+
+
+class InvalidCountryCode(Exception):
+    """The country code provided is not valid."""
