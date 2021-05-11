@@ -83,7 +83,7 @@ class EmailCheckFailed(Exception):
 
 
 class EmailInUse(Exception):
-    """The email privided is already in use and cannot be used to deploy an account."""
+    """The email provided is already in use and cannot be used to deploy an account."""
 
 
 class UnavailableRegion(Exception):
