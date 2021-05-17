@@ -13,3 +13,9 @@ History
 ------------------
 
 * Initial release
+
+
+0.1.1 (17-05-2021)
+------------------
+
+* Filtering out failed accounts from checking their update status
