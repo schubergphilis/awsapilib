@@ -718,6 +718,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             if not self.create_organizational_unit(organizational_unit):
                 self.logger.error('Unable to create the organizational unit!')
                 return False
+        while self.busy:
+            time.sleep(1)
         arguments = {'ProductId': self._account_factory.product_id,
                      'ProvisionedProductName': product_name,
                      'ProvisioningArtifactId': self._active_artifact.get('Id'),
@@ -734,8 +736,6 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                                 {'Key': 'ManagedOrganizationalUnit',
                                                  'Value': organizational_unit}]}
         try:
-            while self.busy:
-                time.sleep(1)
             response = self.service_catalog.provision_product(**arguments)
         except botocore.exceptions.ClientError as err:
             if CREATING_ACCOUNT_ERROR_MESSAGE in err.response['Error']['Message']:
