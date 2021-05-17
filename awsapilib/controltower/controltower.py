@@ -55,7 +55,8 @@ from .controltowerexceptions import (UnsupportedTarget,
                                      EmailCheckFailed,
                                      EmailInUse,
                                      UnavailableRegion,
-                                     RoleCreationFailure)
+                                     RoleCreationFailure,
+                                     NonExistentOU)
 from .resources import (LOGGER,
                         LOGGER_BASENAME,
                         ServiceControlPolicy,
@@ -475,21 +476,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         """
         organizational_unit = self.get_organizational_unit_by_name(name)
         if not organizational_unit:
-            self.logger.error('No organizational unit with name :"%s" registered with Control Tower', name)
-            return False
-        payload = self._get_api_payload(content_string={'OrganizationalUnitId': organizational_unit.id},
-                                        target='deregisterOrganizationalUnit')
-        self.logger.debug('Trying to unregister OU "%s" with payload "%s"', name, payload)
-        response = self.session.post(self.url, json=payload)
-        if not response.ok:
-            self.logger.error('Failed to unregister OU "%s" with response status "%s" and response text "%s"',
-                              name, response.status_code, response.text)
-            return False
-        self.logger.debug('Successfully unregistered management of OU "%s" from Control Tower', name)
-        self.logger.debug('Trying to delete OU "%s" from Organizations', name)
-        response = self.organizations.delete_organizational_unit(OrganizationalUnitId=organizational_unit.id)
-        self.logger.debug(response)
-        return bool(response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 200)
+            return NonExistentOU(name)
+        return organizational_unit.delete()
 
     @validate_availability
     def get_organizational_unit_by_name(self, name):
