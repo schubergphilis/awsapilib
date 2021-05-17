@@ -286,6 +286,8 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
     @property
     def has_available_update(self):
         """If the account is behind the landing zone version."""
+        if self.provision_state == 'PROVISION_FAILED':
+            return False
         return float(self.landing_zone_version) < float(self.control_tower.landing_zone_version)
 
     @property
