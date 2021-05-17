@@ -19,3 +19,9 @@ History
 ------------------
 
 * Filtering out failed accounts from checking their update status
+
+
+0.1.2 (17-05-2021)
+------------------
+
+* Fixed a timing issue with getting the active service catalog product on account creation.
