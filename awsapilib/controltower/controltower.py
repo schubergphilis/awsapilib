@@ -138,7 +138,6 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         self._account_factory_ = None
         self.settling_time = settling_time
         self._root_ou = None
-        self._update_data_ = None
         self._core_accounts = None
 
     @property
