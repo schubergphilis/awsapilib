@@ -332,10 +332,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @property
     def _update_data(self):
-        if self._update_data_ is None:
-            self._update_data_ = next(self._get_paginated_results(content_payload={},
-                                                                  target='getAvailableUpdates'))
-        return self._update_data_
+        return next(self._get_paginated_results(content_payload={},
+                                                target='getAvailableUpdates'), {})
 
     @property
     @validate_availability
