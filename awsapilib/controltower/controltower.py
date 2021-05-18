@@ -855,11 +855,13 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @property
     def governed_regions(self):
+        """Governed regions."""
         return [region.get('Region')
                 for region in self.region_metadata_list if region.get('RegionStatus') == 'GOVERNED']
 
     @property
     def not_governed_regions(self):
+        """Not governed regions."""
         return [region.get('Region')
                 for region in self.region_metadata_list if region.get('RegionStatus') == 'NOT_GOVERNED']
 
