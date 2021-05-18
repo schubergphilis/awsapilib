@@ -25,3 +25,9 @@ History
 ------------------
 
 * Fixed a timing issue with getting the active service catalog product on account creation.
+
+
+0.2.0 (18-05-2021)
+------------------
+
+* Exposed governed and non governed regions and a small fix with latest update changes.
