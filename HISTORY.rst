@@ -31,3 +31,9 @@ History
 ------------------
 
 * Exposed governed and non governed regions and a small fix with latest update changes.
+
+
+0.2.1 (18-05-2021)
+------------------
+
+* Dynamically retrieving updatable information about control tower.
