@@ -780,7 +780,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @validate_availability
     def update(self):
-        """Updates the control tower to the latest version.
+        """Updates the control tower to the next available version.
 
         Returns:
             bool: True on success, False on failure.
@@ -796,10 +796,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         security_account = next((account for account in self.core_accounts if account.label == 'SECURITY'), None)
         if not security_account:
             raise ServiceCallFailed('Could not retrieve security account to get the email.')
-        payload = self._get_api_payload(content_string={'HomeRegion': self.region,
-                                                        'LogAccountEmail': log_account.email,
-                                                        'SecurityAccountEmail': security_account.email},
-                                        target='setupLandingZone')
+        payload = self._get_update_payload(log_account.email, security_account.email)
         self.logger.debug('Trying to update the landing zone with payload "%s"', payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -808,6 +805,25 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             return False
         self.logger.debug('Successfully started updating landing zone')
         return True
+
+    def _get_update_payload(self, log_account_email, security_account_email):
+        """Updates the control tower up to 2.6 version.
+
+        Returns:
+            bool: True on success, False on failure.
+
+        """
+        content = {'HomeRegion': self.region,
+                   'LogAccountEmail': log_account_email,
+                   'SecurityAccountEmail': security_account_email}
+        if self.landing_zone_version == '2.6':
+            region_list = [{"Region": region,
+                            "RegionConfigurationStatus": "ENABLED" if region in self.governed_regions else "DISABLED"}
+                           for region in self.get_available_regions()]
+            content.update({'SetupLandingZoneActionType': 'UPDATE',
+                            'RegionConfigurationList': region_list})
+        return self._get_api_payload(content_string=content,
+                                     target='setupLandingZone')
 
     @property
     def busy(self):
@@ -836,6 +852,16 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     def region_metadata_list(self):
         """Region metadata list."""
         return self._get_status().get('RegionMetadataList')
+
+    @property
+    def governed_regions(self):
+        return [region.get('Region')
+                for region in self.region_metadata_list if region.get('RegionStatus') == 'GOVERNED']
+
+    @property
+    def not_governed_regions(self):
+        return [region.get('Region')
+                for region in self.region_metadata_list if region.get('RegionStatus') == 'NOT_GOVERNED']
 
     def _get_status(self):
         payload = self._get_api_payload(content_string={},
