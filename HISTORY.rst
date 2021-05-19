@@ -37,3 +37,9 @@ History
 ------------------
 
 * Dynamically retrieving updatable information about control tower.
+
+
+0.2.2 (19-05-2021)
+------------------
+
+* Added some blocking on actions to prevent race conditions.
