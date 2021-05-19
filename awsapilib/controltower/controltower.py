@@ -801,6 +801,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                               response.status_code, response.text)
             return False
         self.logger.debug('Successfully started updating landing zone')
+        # Making sure that eventual consistency is not a problem here,
+        # we wait for control tower to be aware of the service catalog process
+        while not self.busy:
+            time.sleep(1)
         return True
 
     def _get_update_payload(self, log_account_email, security_account_email):
@@ -1107,6 +1111,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             self.logger.error('Failed to deploy control tower, retries were spent.. Maybe try again later?')
             return False
         self.logger.debug('Successfully started deploying control tower.')
+        # Making sure that eventual consistency is not a problem here,
+        # we wait for control tower to be aware of the service catalog process
+        while not self.busy:
+            time.sleep(1)
         return True
 
     def decommission(self):
