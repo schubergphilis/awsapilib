@@ -116,11 +116,11 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         def wrap(*args, **kwargs):
             """Inner wrapper decorator."""
             logger = logging.getLogger(f'{LOGGER_BASENAME}.validation_decorator')
-            contol_tower_instance = args[0]
+            control_tower_instance = args[0]
             logger.debug('Decorating method: %s', method)
-            if not contol_tower_instance.is_deployed:
+            if not control_tower_instance.is_deployed:
                 raise ControlTowerNotDeployed
-            if contol_tower_instance.busy:
+            if control_tower_instance.busy:
                 raise ControlTowerBusy
             return method(*args, **kwargs)  # pylint: disable=not-callable
 
