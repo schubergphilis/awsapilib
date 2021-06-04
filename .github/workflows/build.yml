@@ -44,18 +44,21 @@ jobs:
     environment:
       name: release
     steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7.10
+
+      - name: Install pipenv
+        run: pip install pipenv
+
       - name: Download package
         uses: actions/download-artifact@v2
         with:
           name: package
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install pipenv
-        run: pip install pipenv
-
-      - name: Build
+      - name: Upload
         run: _CI/scripts/upload.py
