@@ -32,12 +32,6 @@ jobs:
       - name: Build
         run: _CI/scripts/build.py
 
-      - name: Upload
-        uses: actions/upload-artifact@v2
-        with:
-          name: package
-          path: "dist/"
-
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -54,11 +48,6 @@ jobs:
 
       - name: Install pipenv
         run: pip install pipenv
-
-      - name: Download package
-        uses: actions/download-artifact@v2
-        with:
-          name: package
 
       - name: Upload
         run: _CI/scripts/upload.py
