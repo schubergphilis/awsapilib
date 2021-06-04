@@ -40,3 +40,25 @@ jobs:
         with:
           name: package
           path: "dist/"
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@v2
+        with:
+          name: package
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pipenv
+        run: pip install pipenv
+
+      - name: Build
+        run: _CI/scripts/upload.py
