@@ -23,14 +23,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install pipenv
+        run: pip install pipenv
+
       - name: Lint
-        run: |
-          _CI/scripts/lint.py
+        run: _CI/scripts/lint.py
 
       - name: Test
-        run: |
-          _CI/scripts/test.py
+        run: _CI/scripts/test.py
 
       - name: Build
-        run: |
-          _CI/scripts/build.py
+        run: _CI/scripts/build.py
