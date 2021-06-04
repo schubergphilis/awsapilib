@@ -51,3 +51,6 @@ jobs:
 
       - name: Upload
         run: _CI/scripts/upload.py
+        env:
+          PYPI_UPLOAD_USERNAME: ${{ secrets.PYPI_UPLOAD_USERNAME }}
+          PYPI_UPLOAD_PASSWORD: ${{ secrets.PYPI_UPLOAD_PASSWORD }}
