@@ -32,6 +32,9 @@ Import all parts from console here
    http://google.github.io/styleguide/pyguide.html
 """
 
+from .console import AccountManager
+from .consoleexceptions import NotSolverInstance
+
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
 __date__ = '''30-06-2021'''
@@ -43,3 +46,5 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is to 'use' the module(s), so lint doesn't complain
 
+assert AccountManager
+assert NotSolverInstance

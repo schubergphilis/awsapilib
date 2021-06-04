@@ -41,3 +41,6 @@ __maintainer__ = '''Costas Tyfoxylos'''
 __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
+
+class NotSolverInstance(Exception):
+    """The object provided was not of Solver type."""
