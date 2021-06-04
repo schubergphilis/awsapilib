@@ -26,7 +26,7 @@ version = open('.VERSION').read()
 
 
 setup(
-    name='''awsapilib''',
+    name='''abelmokadem-awsapilib''',
     version=version,
     description='''A python library that exposes AWS services that are not covered by boto3, through the usage of undocumented APIs.''',
     long_description=readme + '\n\n' + history,
