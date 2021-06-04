@@ -32,6 +32,14 @@ Main code for console.
 """
 
 import logging
+import urllib
+
+from dataclasses import dataclass
+from requests import Session
+
+from awsapilib.authentication import LoggerMixin, Urls
+from awsapilib.captcha import Solver, Iterm
+from .consoleexceptions import NotSolverInstance
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -48,69 +56,83 @@ LOGGER_BASENAME = '''console'''
 LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
-from requests import Session
-from bs4 import BeautifulSoup as Bfs
-import urllib
 
-session=Session()
-
-email = 'ROOT_EMAIL_HERE'
-
-url='https://console.aws.amazon.com/console/home?hashArgs=%23a'
-params = {'action': 'resolveAccountType',
-		  'email':  email}
-
-response = session.get(url, params=params)
-
-soup = Bfs(response.text, features="html.parser")
-csrf_token = soup.find('meta',{'name':'csrf_token'}).attrs.get('content')
-session_id = soup.find('meta',{'name':'session_id'}).attrs.get('content')
-
-signin_url = 'https://signin.aws.amazon.com/signin'
-params.update({'csrf': csrf_token})
-signin_response = session.post(signin_url, data=params)
-captcha_url = signin_response.json().get('properties').get('CaptchaURL')
-
-solver = Iterm()
-captcha = solver.solve(captcha_url)
-
-params.update({'captcha_guess': captcha,
-               'captcha_token': signin_response.json().get('properties').get('CES'),
-               'captchaObfuscationToken': signin_response.json().get('properties').get('captchaObfuscationToken')})
-
-final_response = session.post(signin_url, data=params)
-
-params = {'action': 'captcha',
-		  'forgotpassword':  True,
-          'csrf': session.cookies.get('aws-signin-csrf')}
-response_reset_password = session.post(signin_url, data=params)
-captcha_url = response_reset_password.json().get('properties').get('CaptchaURL')
-
-captcha = solver.solve(captcha_url)
-params = {'action': 'getResetPasswordToken',
-		  'email':  email,
-          'csrf': session.cookies.get('aws-signin-csrf')}
-params.update({'captcha_guess': captcha,
-               'captcha_token': response_reset_password.json().get('properties').get('CES'),
-               'captchaObfuscationToken': response_reset_password.json().get('properties').get('captchaObfuscationToken')})
-completed_response = session.post(signin_url, data=params)
+@dataclass
+class Captcha:
+    url: str
+    token: str
+    obfuscation_token: str
 
 
-# get the url from the email
-reset_url = input('Reset URL: ')
-parsed_url = urllib.parse.parse_qs(reset_url)
-response = session.get(reset_url)
-token = parsed_url.get('token').pop()
-key = parsed_url.get('key').pop()
-new_password = input('Password:')
-params = {
-		'action':          'resetPasswordSubmitForm',
-		'confirmpassword': new_password,
-		'key':             key,
-		'newpassword':     new_password,
-		'token':           token,
-		'type':            'RootUser',
-        'csrf': session.cookies.get('aws-signin-csrf', path='/resetpassword')
-	}
-reset_url = 'https://signin.aws.amazon.com/resetpassword'
-reset_response = session.post(reset_url, data=params)
+class AccountManager(LoggerMixin):
+
+    def __init__(self, solver=Iterm):
+        self.session = Session()
+        if not issubclass(solver, Solver):
+            raise NotSolverInstance
+        self._solver = solver()
+        self._console_home_url = f'{Urls.console}/console/home'
+        self._singin_url = f'{Urls.sign_in}/signin'
+        self._reset_url = f'{Urls.sign_in}/resetpassword'
+
+    @staticmethod
+    def _get_captcha_info(response):
+        properties = response.json().get('properties', {})
+        url = properties.get('CaptchaURL')
+        captcha_token = properties.get('CES')
+        captcha_obfuscation_token = properties.get('captchaObfuscationToken')
+        return Captcha(url, captcha_token, captcha_obfuscation_token)
+
+    def _update_parameters_with_captcha(self, parameters, response):
+        captcha = self._get_captcha_info(response)
+        parameters.update({'captcha_guess': self._solver.solve(captcha.url),
+                           'captcha_token': captcha.token,
+                           'captchaObfuscationToken': captcha.obfuscation_token})
+        return parameters
+
+    def _resolve_account_type(self, email):
+        parameters = {'hashArgs': '#a',
+                      'action': 'resolveAccountType',
+                      'email': email}
+        _ = self.session.get(self._console_home_url, params=parameters)
+        parameters.update({'csrf': self.session.cookies.get('aws-signin-csrf')})
+        response = self.session.post(self._singin_url, data=parameters)
+        parameters = self._update_parameters_with_captcha(parameters, response)
+        final_response = self.session.post(self._singin_url, data=parameters)
+        if not all([final_response.ok, final_response.json().get('state', '') == 'SUCCESS']):
+            self.logger.error(f'Error resolving account type, response: {final_response.text}')
+            return False
+        return True
+
+    def request_password_reset(self, email):
+        if not self._resolve_account_type(email):
+            return False
+        parameters = {'action': 'captcha',
+                      'forgotpassword': True,
+                      'csrf': self.session.cookies.get('aws-signin-csrf')}
+        response = self.session.post(self._singin_url, data=parameters)
+        parameters = {'action': 'getResetPasswordToken',
+                      'email': email,
+                      'csrf': self.session.cookies.get('aws-signin-csrf')}
+        parameters = self._update_parameters_with_captcha(parameters, response)
+        completed_response = self.session.post(self._singin_url, data=parameters)
+        if not completed_response.ok:
+            self.logger.error(f'Error requesting password reset, response: {completed_response.text}')
+            return False
+        return completed_response.json().get('state', '') == 'SUCCESS'
+
+    def reset_password(self, reset_url, password):
+        parsed_url = urllib.parse.parse_qs(reset_url)
+        _ = self.session.get(reset_url)
+        parameters = {'action': 'resetPasswordSubmitForm',
+                      'confirmpassword': password,
+                      'key': parsed_url.get('key').pop(),
+                      'newpassword': password,
+                      'token': parsed_url.get('token').pop(),
+                      'type': 'RootUser',
+                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/resetpassword')}
+        response = self.session.post(self._reset_url, data=parameters)
+        if not response.ok:
+            self.logger.error(f'Error resetting password, response: {response.text}')
+            return False
+        return response.json().get('state', '') == 'SUCCESS'

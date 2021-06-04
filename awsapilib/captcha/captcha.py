@@ -36,6 +36,9 @@ import logging
 
 import requests
 
+from abc import ABC, abstractmethod
+from awsapilib.authentication import LoggerMixin
+
 from .captchaexceptions import CaptchaError
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
@@ -54,11 +57,17 @@ LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
 
-class Iterm:  # pylint: disable=too-few-public-methods
+class Solver(ABC, LoggerMixin):
+
+    @abstractmethod
+    def solve(self):
+        pass
+
+
+class Iterm(Solver):  # pylint: disable=too-few-public-methods
     """Interactive captcha solver for iTerm terminals."""
 
-    @staticmethod
-    def solve(url):
+    def solve(self, url):
         """Presents a captcha image and returns the user's guess for the captcha.
 
         Args:

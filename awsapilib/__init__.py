@@ -36,6 +36,7 @@ from .authentication import LoggerMixin, Authenticator
 from .controltower import ControlTower
 from .billing import Billing
 from .sso import Sso
+from .console import AccountManager
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -54,3 +55,4 @@ assert Authenticator
 assert ControlTower
 assert Billing
 assert Sso
+assert AccountManager
