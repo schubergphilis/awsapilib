@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ 3.7.10 ]
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Lint
+        run: |
+          _CI/scripts/lint.py
+
+      - name: Test
+        run: |
+          _CI/scripts/test.py
+
+      - name: Build
+        run: |
+          _CI/scripts/build.py
