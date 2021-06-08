@@ -43,3 +43,9 @@ History
 ------------------
 
 * Added some blocking on actions to prevent race conditions.
+
+
+0.2.3 (08-06-2021)
+------------------
+
+* Bumped dependencies.
