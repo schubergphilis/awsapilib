@@ -125,10 +125,6 @@ class Group(Entity):
 class Account(Entity):
     """Models the Account object of AWS SSO."""
 
-    def __init__(self, sso_instance, data):
-        super().__init__(sso_instance, data)
-        self._instance_id = None
-
     @property
     def url(self):
         """Url for the account.
@@ -189,6 +185,26 @@ class Account(Entity):
         """
         return self._data.get('Status')
 
+    def _provision_saml_provider(self):
+        """Creates the SAMl provider.
+
+        Returns:
+            arn (str): The arn of the SAMl provider
+
+        """
+        target = 'com.amazon.switchboard.service.SWBService.ProvisionSAMLProvider'
+        payload = self._sso.get_api_payload(content_string={'applicationInstanceId': self.instance_id
+                                                            },
+                                            target='ProvisionSAMLProvider',
+                                            path='/control/',
+                                            x_amz_target=target)
+        self.logger.debug('Trying to create saml provider for aws account with payload: %s', payload)
+        response = self._sso.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error(response.text)
+            return {}
+        return response.json()
+
     @property
     def instance_id(self):
         """The instance id of the Account.
@@ -197,17 +213,40 @@ class Account(Entity):
             instance_id (str): The instance id of the account
 
         """
-        if self._instance_id is None:
-            account_id = self.id
-            target = 'com.amazon.switchboard.service.SWBService.GetApplicationInstanceForAWSAccount'
-            payload = self._sso.get_api_payload(content_string={'awsAccountId': account_id},
-                                                target='GetApplicationInstanceForAWSAccount',
-                                                path='/control/',
-                                                x_amz_target=target)
-            self.logger.debug('Trying to get instance id for aws account with payload: %s', payload)
-            response = self._sso.session.post(self.url, json=payload)
-            self._instance_id = response.json().get('applicationInstance', {}).get('instanceId', '')
-        return self._instance_id
+        instance_id = self._retrieve_instance_id()
+        if not instance_id:
+            instance_id = self._provision_application_instance_for_aws_account()
+        return instance_id
+
+    def _provision_application_instance_for_aws_account(self):
+        target = 'com.amazon.switchboard.service.SWBService.ProvisionApplicationInstanceForAWSAccount'
+        payload = self._sso.get_api_payload(content_string={'accountId': self.id,
+                                                            'accountEmail': self.email,
+                                                            'accountName': self.name
+                                                            },
+                                            target='ProvisionApplicationInstanceForAWSAccount',
+                                            path='/control/',
+                                            x_amz_target=target)
+        self.logger.debug('Trying to get instance id for aws account with payload: %s', payload)
+        response = self._sso.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error(response.text)
+            return None
+        return response.json().get('applicationInstance', {}).get('instanceId', None)
+
+    def _retrieve_instance_id(self):
+        account_id = self.id
+        target = 'com.amazon.switchboard.service.SWBService.GetApplicationInstanceForAWSAccount'
+        payload = self._sso.get_api_payload(content_string={'awsAccountId': account_id},
+                                            target='GetApplicationInstanceForAWSAccount',
+                                            path='/control/',
+                                            x_amz_target=target)
+        self.logger.debug('Trying to get instance id for aws account with payload: %s', payload)
+        response = self._sso.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error(response.text)
+            return None
+        return response.json().get('applicationInstance', {}).get('instanceId', None)
 
     @property
     def associated_profiles(self):
