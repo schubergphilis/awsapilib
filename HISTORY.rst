@@ -55,3 +55,9 @@ History
 ------------------
 
 * Added new feature to provision instance_id for an account
+
+
+0.3.0 (16-06-2021)
+------------------
+
+* Added new method to provision saml config in the account
