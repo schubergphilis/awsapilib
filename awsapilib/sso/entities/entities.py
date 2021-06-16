@@ -200,6 +200,9 @@ class Account(Entity):
                                             x_amz_target=target)
         self.logger.debug('Trying to create saml provider for aws account with payload: %s', payload)
         response = self._sso.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error(response.text)
+            return {}
         return response.json()
 
     @property
@@ -226,6 +229,9 @@ class Account(Entity):
                                             x_amz_target=target)
         self.logger.debug('Trying to get instance id for aws account with payload: %s', payload)
         response = self._sso.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error(response.text)
+            return None
         return response.json().get('applicationInstance', {}).get('instanceId', None)
 
     def _retrieve_instance_id(self):
@@ -237,6 +243,9 @@ class Account(Entity):
                                             x_amz_target=target)
         self.logger.debug('Trying to get instance id for aws account with payload: %s', payload)
         response = self._sso.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error(response.text)
+            return None
         return response.json().get('applicationInstance', {}).get('instanceId', None)
 
     @property
