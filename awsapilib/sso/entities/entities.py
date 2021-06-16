@@ -127,7 +127,6 @@ class Account(Entity):
 
     def __init__(self, sso_instance, data):
         super().__init__(sso_instance, data)
-        self._instance_id = None
 
     @property
     def url(self):
@@ -214,13 +213,10 @@ class Account(Entity):
             instance_id (str): The instance id of the account
 
         """
-        if self._instance_id is None:
-            self._instance_id = self._retrieve_instance_id()
-            if self._instance_id is None:
-                self._instance_id = self._provision_application_instance_for_aws_account()
-                self._provision_saml_provider()  # Adding creation of SAML provider because without it
-                # permission sets cannot be assinged. Also this is not something users will ever care about.
-        return self._instance_id
+        instance_id = self._retrieve_instance_id()
+        if not instance_id:
+            instance_id = self._provision_application_instance_for_aws_account()
+        return instance_id
 
     def _provision_application_instance_for_aws_account(self):
         target = 'com.amazon.switchboard.service.SWBService.ProvisionApplicationInstanceForAWSAccount'

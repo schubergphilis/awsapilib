@@ -82,7 +82,9 @@ SUPPORTED_TARGETS = ['GetUserPoolInfo',
                      'UpdatePermissionSet',
                      'listAccounts',
                      'DeletePermissionSet',
-                     'DeletePermissionsPolicy']
+                     'DeletePermissionsPolicy',
+                     'ProvisionApplicationInstanceForAWSAccount',
+                     'ProvisionSAMLProvider']
 
 
 class Sso(LoggerMixin):  # pylint: disable=too-many-public-methods
