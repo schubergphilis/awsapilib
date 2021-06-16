@@ -125,9 +125,6 @@ class Group(Entity):
 class Account(Entity):
     """Models the Account object of AWS SSO."""
 
-    def __init__(self, sso_instance, data):
-        super().__init__(sso_instance, data)
-
     @property
     def url(self):
         """Url for the account.
