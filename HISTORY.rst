@@ -49,3 +49,9 @@ History
 ------------------
 
 * Bumped dependencies.
+
+
+0.2.4 (16-06-2021)
+------------------
+
+* Added new feature to provision instance_id for an account
