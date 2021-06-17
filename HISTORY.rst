@@ -61,3 +61,9 @@ History
 ------------------
 
 * Added new method to provision saml config in the account
+
+
+0.4.0 (17-06-2021)
+------------------
+
+* Added provision_saml_provider to the public api
