@@ -185,7 +185,7 @@ class Account(Entity):
         """
         return self._data.get('Status')
 
-    def _provision_saml_provider(self):
+    def provision_saml_provider(self):
         """Creates the SAMl provider.
 
         Returns:
