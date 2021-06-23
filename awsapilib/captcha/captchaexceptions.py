@@ -44,3 +44,7 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 class CaptchaError(Exception):
     """There was an error retrieving the captcha."""
+
+
+class UnsupportedTerminal(Exception):
+    """The terminal executing under is not supported."""

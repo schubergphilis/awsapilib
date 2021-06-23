@@ -33,13 +33,14 @@ Main code for captcha.
 
 import base64
 import logging
+import os
 
 import requests
 
 from abc import ABC, abstractmethod
 from awsapilib.authentication import LoggerMixin
 
-from .captchaexceptions import CaptchaError
+from .captchaexceptions import CaptchaError, UnsupportedTerminal
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -66,6 +67,11 @@ class Solver(ABC, LoggerMixin):
 
 class Iterm(Solver):  # pylint: disable=too-few-public-methods
     """Interactive captcha solver for iTerm terminals."""
+
+    def __init__(self):
+        terminal = os.environ.get('TERM_PROGRAM', 'UNKNOWN')
+        if 'iterm' not in terminal.lower():
+            raise UnsupportedTerminal(terminal)
 
     def solve(self, url):
         """Presents a captcha image and returns the user's guess for the captcha.
