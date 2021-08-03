@@ -94,3 +94,24 @@ class Iterm(Solver):  # pylint: disable=too-few-public-methods
             raise CaptchaError(f'User interrupted.\nIf the captcha was not showing correctly please check that the url'
                                f'{url} indeed points to a valid captcha image..') from None
         return guess
+
+
+class Terminal(Solver):  # pylint: disable=too-few-public-methods
+    """Interactive captcha solver for standard terminals."""
+
+    def solve(self, url):
+        """Presents a captcha image url and returns the user's guess for the captcha.
+
+        Args:
+            url (str): The url to provide that should have the captcha image.
+
+        Returns:
+            guess (str): The guess of the user for the captcha.
+
+        """
+        print(f'Please follow {url} and provide the solution.')
+        try:
+            guess = input('Guess: ')
+        except KeyboardInterrupt:
+            raise CaptchaError(f'User interrupted.') from None
+        return guess
