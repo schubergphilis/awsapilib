@@ -31,7 +31,7 @@ Import all parts from captcha here
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
 """
-from .captcha import Solver, Iterm
+from .captcha import Solver, Iterm, Terminal
 from .captchaexceptions import CaptchaError
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
@@ -47,4 +47,5 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 assert Solver
 assert Iterm
+assert Terminal
 assert CaptchaError

@@ -32,13 +32,14 @@ Main code for console.
 """
 
 import logging
+import os
 import urllib
 
 from dataclasses import dataclass
 from requests import Session
 
 from awsapilib.authentication import LoggerMixin, Urls
-from awsapilib.captcha import Solver, Iterm
+from awsapilib.captcha import Solver, Iterm, Terminal
 from .consoleexceptions import NotSolverInstance
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
@@ -72,9 +73,12 @@ class Oidc:
     redirect_url: str
 
 
+console_solver = Iterm if os.environ.get('TERM_PROGRAM', '').lower() == 'iterm' else Terminal
+
+
 class AccountManager(LoggerMixin):
 
-    def __init__(self, solver=Iterm):
+    def __init__(self, solver=console_solver):
         self.session = Session()
         if not issubclass(solver, Solver):
             raise NotSolverInstance
