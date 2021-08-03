@@ -31,7 +31,7 @@ Import all parts from resources here
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
 """
-import time
+
 from time import sleep
 
 from awsapilib.authentication import LoggerMixin
