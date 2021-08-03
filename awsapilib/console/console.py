@@ -64,6 +64,14 @@ class Captcha:
     obfuscation_token: str
 
 
+@dataclass
+class Oidc:
+    client_id: str
+    code_challenge: str
+    code_challenge_method: str
+    redirect_url: str
+
+
 class AccountManager(LoggerMixin):
 
     def __init__(self, solver=Iterm):
@@ -72,7 +80,7 @@ class AccountManager(LoggerMixin):
             raise NotSolverInstance
         self._solver = solver()
         self._console_home_url = f'{Urls.console}/console/home'
-        self._singin_url = f'{Urls.sign_in}/signin'
+        self._signin_url = f'{Urls.sign_in}/signin'
         self._reset_url = f'{Urls.sign_in}/resetpassword'
 
     @staticmethod
@@ -82,6 +90,14 @@ class AccountManager(LoggerMixin):
         captcha_token = properties.get('CES')
         captcha_obfuscation_token = properties.get('captchaObfuscationToken')
         return Captcha(url, captcha_token, captcha_obfuscation_token)
+
+    @staticmethod
+    def _get_oidc_info(referer):
+        parsed = urllib.parse.parse_qs(referer)
+        return Oidc(parsed.get('https://signin.aws.amazon.com/oauth?client_id').pop(),
+                    parsed.get('code_challenge').pop(),
+                    parsed.get('code_challenge_method').pop(),
+                    parsed.get('redirect_uri').pop())
 
     def _update_parameters_with_captcha(self, parameters, response):
         captcha = self._get_captcha_info(response)
@@ -95,27 +111,37 @@ class AccountManager(LoggerMixin):
                       'action': 'resolveAccountType',
                       'email': email}
         _ = self.session.get(self._console_home_url, params=parameters)
-        parameters.update({'csrf': self.session.cookies.get('aws-signin-csrf')})
-        response = self.session.post(self._singin_url, data=parameters)
+        parameters.update({'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')})
+        response = self.session.post(self._signin_url, data=parameters)
         parameters = self._update_parameters_with_captcha(parameters, response)
-        final_response = self.session.post(self._singin_url, data=parameters)
+        final_response = self.session.post(self._signin_url, data=parameters)
         if not all([final_response.ok, final_response.json().get('state', '') == 'SUCCESS']):
             self.logger.error(f'Error resolving account type, response: {final_response.text}')
             return False
         return True
+
+    def _resolve_account_type_response(self, email):
+        parameters = {'hashArgs': '#a',
+                      'action': 'resolveAccountType',
+                      'email': email}
+        _ = self.session.get(self._console_home_url, params=parameters)
+        parameters.update({'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')})
+        response = self.session.post(self._signin_url, data=parameters)
+        parameters = self._update_parameters_with_captcha(parameters, response)
+        return self.session.post(self._signin_url, data=parameters)
 
     def request_password_reset(self, email):
         if not self._resolve_account_type(email):
             return False
         parameters = {'action': 'captcha',
                       'forgotpassword': True,
-                      'csrf': self.session.cookies.get('aws-signin-csrf')}
-        response = self.session.post(self._singin_url, data=parameters)
+                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
+        response = self.session.post(self._signin_url, data=parameters)
         parameters = {'action': 'getResetPasswordToken',
                       'email': email,
-                      'csrf': self.session.cookies.get('aws-signin-csrf')}
+                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
         parameters = self._update_parameters_with_captcha(parameters, response)
-        completed_response = self.session.post(self._singin_url, data=parameters)
+        completed_response = self.session.post(self._signin_url, data=parameters)
         if not completed_response.ok:
             self.logger.error(f'Error requesting password reset, response: {completed_response.text}')
             return False
@@ -136,3 +162,21 @@ class AccountManager(LoggerMixin):
             self.logger.error(f'Error resetting password, response: {response.text}')
             return False
         return response.json().get('state', '') == 'SUCCESS'
+
+    # def get_root_console(self, email, password):
+    #     parameters = {'action': 'authenticateRoot',
+    #                   'captcha_status_token': captchaStatusToken,
+    #                   'client_id': s.oidcState.clientID,
+    #                   'code_challenge_method': s.oidcState.codeChallengeMethod,
+    #                   'code_challenge': s.oidcState.codeChallenge,
+    #                   'email': email,
+    #                   'mfaSerial': 'undefined',
+    #                   'password': password,
+    #                   'redirect_uri': s.oidcState.redirectURL,
+    #                   'csrf': self.session.cookies.get('aws-signin-csrf')
+    #                   }
+    #     response = self.session.post(self._signin_url, data=parameters)
+    #     if not response.ok:
+    #         self.logger.error(f'Error resetting password, response: {response.text}')
+    #         return False
+    #     return response.json().get('state', '') == 'SUCCESS'
