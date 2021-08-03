@@ -31,7 +31,7 @@ Import all parts from resources here
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
 """
-
+import time
 from time import sleep
 
 from awsapilib.authentication import LoggerMixin
@@ -441,7 +441,8 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
             response (dict): The response from the api of the termination request.
 
         """
-        return self.service_catalog.terminate_provisioned_product(ProvisionedProductId=self.service_catalog_id)
+        response = self.service_catalog.terminate_provisioned_product(ProvisionedProductId=self.service_catalog_id)
+        return response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 200
 
     def delete(self, suspended_ou_name=None):
         """Delete."""
@@ -497,6 +498,7 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
                                                  'Value': self.organizational_unit.name,
                                                  'UsePreviousValue': True}]}
         response = self.service_catalog.update_provisioned_product(**arguments)
+        self.logger.debug(f'Got response: {response}')
         return response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 200
 
 
