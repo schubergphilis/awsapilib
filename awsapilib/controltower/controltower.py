@@ -988,12 +988,17 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                    'region': 'us-east-1'}
         self.logger.debug('Trying to system role with payload "%s"', payload)
         response = self.session.post(self._iam_admin_url, json=payload)
-        if all([not response.ok,
-                response.status_code == 409,
-                response.json().get('Error', {}).get('Code') == 'EntityAlreadyExists]']):
-            self.logger.error('Entity already exists, response status "%s" and response text "%s"',
+        try:
+            if all([not response.ok,
+                    response.status_code == 409,
+                    response.json().get('Error', {}).get('Code') == 'EntityAlreadyExists]']):
+                self.logger.error('Entity already exists, response status "%s" and response text "%s"',
+                                  response.status_code, response.text)
+                return True
+        except ValueError:
+            self.logger.error('Error on request, response status "%s" and response text "%s"',
                               response.status_code, response.text)
-            return True
+            return False
         if not response.ok:
             self.logger.error('Entity already exists, response status "%s" and response text "%s"',
                               response.status_code, response.text)
