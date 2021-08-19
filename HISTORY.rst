@@ -67,3 +67,9 @@ History
 ------------------
 
 * Added provision_saml_provider to the public api
+
+
+0.4.1 (19-08-2021)
+------------------
+
+* Add explict error handling on bad response.
