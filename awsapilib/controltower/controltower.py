@@ -523,9 +523,12 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             organizational_units (OrganizationsOU): A list of organizational units objects under Organizations.
 
         """
-        response = self.organizations.list_organizational_units_for_parent(ParentId=self.root_ou.id)
+        paginator = self.organizations.get_paginator('list_organizational_units_for_parent')
+        pages = paginator.paginate(ParentId=self.root_ou.id)
+        response = list(itertools.chain.from_iterable([page['OrganizationalUnits'] for page in pages]))
+
         return [OrganizationsOU(data)
-                for data in response.get('OrganizationalUnits', [])]
+                for data in response]
 
     @validate_availability
     def get_organizations_ou_by_name(self, name):
