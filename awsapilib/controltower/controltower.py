@@ -32,6 +32,7 @@ Main code for controltower.
 """
 
 import copy
+import itertools
 import json
 import logging
 import time
