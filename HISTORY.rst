@@ -73,3 +73,9 @@ History
 ------------------
 
 * Add explict error handling on bad response.
+
+
+0.4.2 (01-09-2021)
+------------------
+
+* Added pagination on organizational OU retrieval.
