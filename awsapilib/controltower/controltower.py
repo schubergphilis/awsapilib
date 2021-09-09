@@ -127,12 +127,12 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
         return wrap
 
-    def __init__(self, arn, settling_time=90):
-        self.aws_authenticator = Authenticator(arn)
+    def __init__(self, arn, settling_time=90, region=None):
+        self.aws_authenticator = Authenticator(arn, region=region)
         self.service_catalog = boto3.client('servicecatalog', **self.aws_authenticator.assumed_role_credentials)
         self.organizations = boto3.client('organizations', **self.aws_authenticator.assumed_role_credentials)
         self.session = self._get_authenticated_session()
-        self._region = None
+        self._region = region
         self._is_deployed = None
         self.url = f'https://{self.region}.console.aws.amazon.com/controltower/api/controltower'
         self._iam_admin_url = 'https://eu-west-1.console.aws.amazon.com/controltower/api/iamadmin'
