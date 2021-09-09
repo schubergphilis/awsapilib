@@ -79,3 +79,9 @@ History
 ------------------
 
 * Added pagination on organizational OU retrieval.
+
+
+0.5.0 (09-09-2021)
+------------------
+
+* Explicitly passing region to control tower instantiation.
