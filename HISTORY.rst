@@ -85,3 +85,9 @@ History
 ------------------
 
 * Explicitly passing region to control tower instantiation.
+
+
+0.5.1 (09-09-2021)
+------------------
+
+* Raising exception if csrf token retrieved has no value.
