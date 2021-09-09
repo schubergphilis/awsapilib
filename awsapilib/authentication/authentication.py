@@ -486,6 +486,8 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
                                    csrf_token_data.attributes).attrs.get(csrf_token_data.attribute_value)
         except AttributeError:
             raise ValueError('Response received: %s' % console_page_response.text)
+        if not csrf_token:
+            raise NoSigninTokenReceived('Unable to retrieve csrf token.')
         session = requests.Session()
         cookies_to_filter = self._standard_cookies + extra_cookies if extra_cookies else []
         cookies = self._filter_cookies(self._session.cookies, cookies_to_filter)
