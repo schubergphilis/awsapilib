@@ -91,3 +91,9 @@ History
 ------------------
 
 * Raising exception if csrf token retrieved has no value.
+
+
+0.5.2 (09-09-2021)
+------------------
+
+* Fixed hardcoded url pointing to eu-west-1 making it possible to deploy to other home regions than Ireland.
