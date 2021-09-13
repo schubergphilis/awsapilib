@@ -61,3 +61,24 @@ class Cloudformation(LoggerMixin):  # pylint: disable=too-few-public-methods
 
     def _get_authenticated_session(self):
         return self.aws_authenticator.get_cloudformation_authenticated_session()
+
+    @property
+    def stacksets(self):
+        return StackSet(self)
+
+
+class StackSet:
+
+    def __init__(self, cloudformation_instance):
+        self._cloudformation = cloudformation_instance
+        self._api_url = (f'{cloudformation_instance.aws_authenticator.urls.regional_console}/'
+                         f'cloudformation/service/stacksets/')
+
+    @property
+    def organizations_trusted_access(self):
+        endpoint = 'describeOrganizationsTrustedAccess'
+        payload = {'region': self._cloudformation.aws_authenticator.region}
+        response = self._cloudformation.session.get(f'{self._api_url}/{endpoint}', params=payload)
+        if not response.ok:
+            raise ValueError(f'Error, response received : {response.text}')
+        return response.json().get('status') == 'ENABLED'
