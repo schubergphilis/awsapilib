@@ -51,7 +51,7 @@ LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
 
-class Cloudformation(LoggerMixin):  # pylint: disable=too-few-public-methods
+class Cloudformation(LoggerMixin):
     """Models Control Tower by wrapping around service catalog."""
 
     def __init__(self, arn, region=None):
@@ -64,10 +64,12 @@ class Cloudformation(LoggerMixin):  # pylint: disable=too-few-public-methods
 
     @property
     def stacksets(self):
+        """Exposes the stacksets settings."""
         return StackSet(self)
 
 
-class StackSet:
+class StackSet:  # pylint: disable=too-few-public-methods
+    """Models the stacksets settings and implements the interaction with them."""
 
     def __init__(self, cloudformation_instance):
         self._cloudformation = cloudformation_instance
@@ -76,9 +78,14 @@ class StackSet:
 
     @property
     def organizations_trusted_access(self):
+        """Setting about the organizations trusted access."""
         endpoint = 'describeOrganizationsTrustedAccess'
         payload = {'region': self._cloudformation.aws_authenticator.region}
         response = self._cloudformation.session.get(f'{self._api_url}/{endpoint}', params=payload)
         if not response.ok:
             raise ValueError(f'Error, response received : {response.text}')
         return response.json().get('status') == 'ENABLED'
+
+    @organizations_trusted_access.setter
+    def organizations_trusted_access(self, value):
+        pass
