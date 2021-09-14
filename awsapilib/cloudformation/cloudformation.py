@@ -35,6 +35,8 @@ import logging
 
 from awsapilib.authentication import Authenticator, LoggerMixin
 
+from .cloudformationexceptions import ServerError
+
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
 __date__ = '''13-09-2021'''
@@ -68,24 +70,52 @@ class Cloudformation(LoggerMixin):
         return StackSet(self)
 
 
-class StackSet:  # pylint: disable=too-few-public-methods
+class StackSet:
     """Models the stacksets settings and implements the interaction with them."""
 
     def __init__(self, cloudformation_instance):
         self._cloudformation = cloudformation_instance
         self._api_url = (f'{cloudformation_instance.aws_authenticator.urls.regional_console}/'
                          f'cloudformation/service/stacksets/')
+        self._region_payload = {'region': self._cloudformation.aws_authenticator.region}
 
     @property
     def organizations_trusted_access(self):
         """Setting about the organizations trusted access."""
         endpoint = 'describeOrganizationsTrustedAccess'
-        payload = {'region': self._cloudformation.aws_authenticator.region}
-        response = self._cloudformation.session.get(f'{self._api_url}/{endpoint}', params=payload)
+        response = self._cloudformation.session.get(f'{self._api_url}/{endpoint}', params=self._region_payload)
         if not response.ok:
-            raise ValueError(f'Error, response received : {response.text}')
+            raise ServerError(f'Error, response received : {response.text}')
         return response.json().get('status') == 'ENABLED'
 
     @organizations_trusted_access.setter
     def organizations_trusted_access(self, value):
-        pass
+        """Setter of the organizations trusted access."""
+        value = bool(value)
+        return self.enable_organizations_trusted_access() if value else self.disable_organizations_trusted_access()
+
+    def enable_organizations_trusted_access(self):
+        """Enables organization trusted access.
+
+        Returns:
+            True on success
+
+        """
+        endpoint = 'enableOrganizationsTrustedAccess'
+        return self._set_organizations_trusted_access(endpoint)
+
+    def disable_organizations_trusted_access(self):
+        """Disables organization trusted access.
+
+        Returns:
+            True on success
+
+        """
+        endpoint = 'disableOrganizationsTrustedAccess'
+        return self._set_organizations_trusted_access(endpoint)
+
+    def _set_organizations_trusted_access(self, endpoint):
+        response = self._cloudformation.session.get(f'{self._api_url}/{endpoint}', params=self._region_payload)
+        if not response.ok:
+            raise ServerError(f'Error, response received : {response.text}')
+        return True
