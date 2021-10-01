@@ -97,3 +97,9 @@ History
 ------------------
 
 * Fixed hardcoded url pointing to eu-west-1 making it possible to deploy to other home regions than Ireland.
+
+
+0.6.0 (01-10-2021)
+------------------
+
+* Implemented contol tower repair and bumped dependencies.
