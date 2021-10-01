@@ -1148,3 +1148,38 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         self._is_deployed = None
         self.logger.debug('Successfully started decommissioning control tower.')
         return True
+
+    def repair(self):
+        """Repairs control tower.
+
+        Returns:
+            bool: True on success, False on failure.
+
+        """
+        region_list = [{"Region": region, "RegionConfigurationStatus": "ENABLED"}
+                       for region in self.governed_regions]
+        validation = self._pre_deploy_check()
+        self.logger.debug('Got validation response %s.', validation)
+        if not all([list(entry.values()).pop().get('Result') == 'SUCCESS' for entry in validation]):
+            raise PreDeployValidationFailed(validation)
+        if not all([self._create_control_tower_admin(),
+                    self._create_control_tower_cloud_trail_role(),
+                    self._create_control_tower_stack_set_role(),
+                    self._create_control_tower_config_aggregator_role()]):
+            raise RoleCreationFailure('Unable to create required roles AWSControlTowerAdmin, '
+                                      'AWSControlTowerCloudTrailRole, AWSControlTowerStackSetRole, '
+                                      'AWSControlTowerConfigAggregatorRole, manual cleanup is required.')
+        log_account = next((account for account in self.core_accounts if account.label == 'LOGGING'), None)
+        if not log_account:
+            raise ServiceCallFailed('Could not retrieve logging account to get the email.')
+        security_account = next((account for account in self.core_accounts if account.label == 'SECURITY'), None)
+        if not security_account:
+            raise ServiceCallFailed('Could not retrieve security account to get the email.')
+        payload = self._get_api_payload(content_string={'HomeRegion': self.region,
+                                                        'LogAccountEmail': log_account.email,
+                                                        'SecurityAccountEmail': security_account.email,
+                                                        'RegionConfigurationList': region_list,
+                                                        'SetupLandingZoneActionType': 'REPAIR'},
+                                        target='setupLandingZone')
+        self.logger.debug('Trying to repair control tower with payload "%s"', payload)
+        return self._deploy(payload)
