@@ -435,7 +435,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self._register_org_ou_in_control_tower(org_ou)
 
     def _register_org_ou_in_control_tower(self, org_ou):
-        self.logger.debug('Registering of re-registering OU under Control Tower')
+        self.logger.debug('Registering or re-registering OU under Control Tower')
         payload = self._get_api_payload(content_string={'OrganizationalUnitId': org_ou.id,
                                                         'OrganizationalUnitName': org_ou.name},
                                         target='manageOrganizationalUnit')
