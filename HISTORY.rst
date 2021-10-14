@@ -103,3 +103,9 @@ History
 ------------------
 
 * Implemented contol tower repair and bumped dependencies.
+
+
+0.7.0 (14-10-2021)
+------------------
+
+* - Adding a force option to the register_ou function to force re-registering
