@@ -45,6 +45,8 @@ import requests
 
 from opnieuw import retry
 from awsapilib.authentication import Authenticator, LoggerMixin
+from boto3_type_annotations.organizations import Client as organizationsClient
+from boto3_type_annotations.servicecatalog import Client as servicecatalogClient
 
 from .controltowerexceptions import (UnsupportedTarget,
                                      OUCreating,
@@ -129,8 +131,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def __init__(self, arn, settling_time=90, region=None):
         self.aws_authenticator = Authenticator(arn, region=region)
-        self.service_catalog = boto3.client('servicecatalog', **self.aws_authenticator.assumed_role_credentials)
-        self.organizations = boto3.client('organizations', **self.aws_authenticator.assumed_role_credentials)
+        self.service_catalog: servicecatalogClient = boto3.client('servicecatalog', **self.aws_authenticator.assumed_role_credentials)
+        self.organizations: organizationsClient = boto3.client('organizations', **self.aws_authenticator.assumed_role_credentials)
         self.session = self._get_authenticated_session()
         self._region = region
         self._is_deployed = None

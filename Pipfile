@@ -21,6 +21,7 @@ twine = "~=1.13.0"
 coloredlogs = "~=10.0"
 emoji = "~=0.5.3"
 toml = "~=0.10.0"
+boto3-type-annotations-with-docs = "~=0.3"
 
 [packages]
 
@@ -28,3 +29,4 @@ boto3 = ">=1.15.17,<2.0"
 requests = ">=2.25.0,<3.0"
 beautifulsoup4 = ">=4.9.3,<5.0"
 opnieuw = ">=1.1.0,<2.0"
+boto3-type-annotations = "~=0.3"
