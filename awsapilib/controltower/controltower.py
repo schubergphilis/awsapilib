@@ -420,7 +420,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         """
         org_ou = self.get_organizations_ou_by_name(name)
         if not org_ou:
-            self.logger.error(f'OU: "%s" does not exists or is not registered with Control Tower, can not re-register')
+            self.logger.error(
+                f'OU: "{name}" does not exists or is not registered with Control Tower, can not re-register'
+            )
             return False
         return self._register_org_ou_in_control_tower(org_ou)
 
