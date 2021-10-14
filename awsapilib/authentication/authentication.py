@@ -41,6 +41,7 @@ import boto3
 import botocore
 import requests
 
+from boto3_type_annotations.sts import Client as StsClient
 from bs4 import BeautifulSoup as Bfs
 
 from .authenticationexceptions import NoSigninTokenReceived, InvalidCredentials, ExpiredCredentials
@@ -176,7 +177,7 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
         self.arn = arn
         self.session_duration = session_duration
         self._session = requests.Session()
-        self._sts_connection = boto3.client('sts', region_name=region)
+        self._sts_connection: StsClient = boto3.client('sts', region_name=region)
         self.region = region or self._get_region()
         self._assumed_role = self._get_assumed_role(arn)
         self.urls = Urls(self.region)

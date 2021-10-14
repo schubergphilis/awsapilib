@@ -38,14 +38,16 @@ import logging
 import time
 from functools import wraps
 from time import sleep
+from typing import Optional
 
 import boto3
 import botocore
 import requests
-
+from boto3_type_annotations.organizations import Client as OrganizationsClient
+from boto3_type_annotations.servicecatalog import Client as ServicecatalogClient
 from opnieuw import retry
-from awsapilib.authentication import Authenticator, LoggerMixin
 
+from awsapilib.authentication import Authenticator, LoggerMixin
 from .controltowerexceptions import (UnsupportedTarget,
                                      OUCreating,
                                      NoServiceCatalogAccess,
@@ -129,8 +131,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def __init__(self, arn, settling_time=90, region=None):
         self.aws_authenticator = Authenticator(arn, region=region)
-        self.service_catalog = boto3.client('servicecatalog', **self.aws_authenticator.assumed_role_credentials)
-        self.organizations = boto3.client('organizations', **self.aws_authenticator.assumed_role_credentials)
+        self.service_catalog: ServicecatalogClient = boto3.client('servicecatalog',
+                                                                  **self.aws_authenticator.assumed_role_credentials)
+        self.organizations: OrganizationsClient = boto3.client('organizations',
+                                                               **self.aws_authenticator.assumed_role_credentials)
         self.session = self._get_authenticated_session()
         self._region = region
         self._is_deployed = None
@@ -416,7 +420,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             name (str): The name of the OU to create.
 
         Returns:
-            result (bool): True if successfull, False otherwise.
+            result (bool): True if successful, False otherwise.
 
         """
         self.logger.debug('Trying to create OU :"%s" under root ou', name)
@@ -469,7 +473,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             name (str): The name of the OU to delete.
 
         Returns:
-            result (bool): True if successfull, False otherwise.
+            result (bool): True if successful, False otherwise.
 
         """
         organizational_unit = self.get_organizational_unit_by_name(name)
@@ -1045,15 +1049,15 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self._create_system_role(parameters)
 
     def deploy(self,  # pylint: disable=too-many-arguments,too-many-locals
-               logging_account_email,
-               security_account_email,
-               logging_account_name='Log Archive',
-               security_account_name='Audit',
-               core_ou_name='Security',
-               custom_ou_name='Sandbox',
-               regions=None,
-               retries=10,
-               wait=1):
+               logging_account_email: str,
+               security_account_email: str,
+               logging_account_name: str = 'Log Archive',
+               security_account_name: str = 'Audit',
+               core_ou_name: str = 'Security',
+               custom_ou_name: str = 'Sandbox',
+               regions: Optional[list] = None,
+               retries: int = 10,
+               wait: int = 1) -> bool:
         """Deploys control tower.
 
         Returns:
@@ -1103,11 +1107,11 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         self.logger.debug('Trying to deploy control tower with payload "%s"', payload)
         return self._deploy(payload, retries, wait)
 
-    def _deploy(self, payload, retries=10, wait=1):
-        succeded = False
+    def _deploy(self, payload: dict, retries: int = 10, wait: int = 1) -> bool:
+        succeeded = False
         while retries:
             response = self.session.post(self.url, json=payload)
-            succeded = response.ok
+            succeeded = response.ok
             retries -= 1
             if response.ok:
                 retries = 0
@@ -1117,7 +1121,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                   'still have %s retries will wait for %s seconds', response.status_code,
                                   response.text, retries, wait)
                 sleep(wait)
-        if not succeded:
+        if not succeeded:
             self.logger.error('Failed to deploy control tower, retries were spent.. Maybe try again later?')
             return False
         self.logger.debug('Successfully started deploying control tower.')
@@ -1127,10 +1131,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             time.sleep(1)
         return True
 
-    def decommission(self):
+    def decommission(self) -> bool:
         """Decommissions a landing zone.
 
-        The api call does not seem to be enough and although the resources are decomissioned like with
+        The api call does not seem to be enough and although the resources are decommissioned like with
         the proper process, control tower responds with a delete failed on the api, so it seems that
         aws needs to perform actions on their end for the decommissioning to be successful.
 
