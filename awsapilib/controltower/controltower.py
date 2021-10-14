@@ -388,7 +388,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                            next_token_marker='NextToken')
 
     @validate_availability
-    def register_organizations_ou(self, name: str, force: bool = True) -> bool:
+    def register_organizations_ou(self, name: str, force: bool = False) -> bool:
         """Registers an Organizations OU under control tower.
 
         Args:
