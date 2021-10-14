@@ -408,7 +408,6 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             return False
         return self._register_org_ou_in_control_tower(org_ou)
 
-
     @validate_availability
     def create_organizational_unit(self, name):
         """Creates a Control Tower managed organizational unit.
