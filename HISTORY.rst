@@ -109,3 +109,9 @@ History
 ------------------
 
 * - Adding a force option to the register_ou function to force re-registering
+
+
+0.8.0 (14-10-2021)
+------------------
+
+* - Adding a force option to the register_ou function to force re-registering
