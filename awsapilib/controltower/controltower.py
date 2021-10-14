@@ -388,17 +388,18 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                            next_token_marker='NextToken')
 
     @validate_availability
-    def register_organizations_ou(self, name):
+    def register_organizations_ou(self, name: str, force: bool = False) -> bool:
         """Registers an Organizations OU under control tower.
 
         Args:
             name (str): The name of the Organizations OU to register to Control Tower.
+            force (bool): Forces re-registering if the OU is already controlled by Control Tower
 
         Returns:
-            result (bool): True if successfull, False otherwise.
+            result (bool): True if successful, False otherwise.
 
         """
-        if self.get_organizational_unit_by_name(name):
+        if self.get_organizational_unit_by_name(name) and not force:
             self.logger.info('OU "%s" is already registered with Control Tower.', name)
             return True
         org_ou = self.get_organizations_ou_by_name(name)
@@ -434,7 +435,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self._register_org_ou_in_control_tower(org_ou)
 
     def _register_org_ou_in_control_tower(self, org_ou):
-        self.logger.debug('Trying to move management of OU under Control Tower')
+        self.logger.debug('Registering or re-registering OU under Control Tower')
         payload = self._get_api_payload(content_string={'OrganizationalUnitId': org_ou.id,
                                                         'OrganizationalUnitName': org_ou.name},
                                         target='manageOrganizationalUnit')
@@ -444,7 +445,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                               'and response text "%s"',
                               org_ou.name, response.status_code, response.text)
             return False
-        self.logger.debug('Successfully moved management of OU "%s" under Control Tower', org_ou.name)
+        self.logger.debug('Successfully registered or re-registered OU "%s" under Control Tower', org_ou.name)
         return True
 
     def _is_busy_with_ou_guardrails(self):
