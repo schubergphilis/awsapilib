@@ -409,7 +409,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @validate_availability
     def reregister_organizations_ou(self, name: str) -> bool:
-        """Re-registers an OU in control tower
+        """Re-registers an OU in control tower.
 
         Args:
             name (str): The name of the Organizations OU to re-register to Control Tower.
