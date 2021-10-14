@@ -395,7 +395,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             name (str): The name of the Organizations OU to register to Control Tower.
 
         Returns:
-            result (bool): True if successfull, False otherwise.
+            result (bool): True if successful, False otherwise.
 
         """
         if self.get_organizational_unit_by_name(name):
@@ -404,6 +404,23 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         org_ou = self.get_organizations_ou_by_name(name)
         if not org_ou:
             self.logger.error('OU "%s" does not exist under organizations.', name)
+            return False
+        return self._register_org_ou_in_control_tower(org_ou)
+
+    @validate_availability
+    def reregister_organizations_ou(self, name: str) -> bool:
+        """Re-registers an OU in control tower
+
+        Args:
+            name (str): The name of the Organizations OU to re-register to Control Tower.
+
+        Returns:
+            result (bool): True if successful, False otherwise.
+
+        """
+        org_ou = self.get_organizations_ou_by_name(name)
+        if not org_ou:
+            self.logger.error(f'OU: "%s" does not exists or is not registered with Control Tower, can not re-register')
             return False
         return self._register_org_ou_in_control_tower(org_ou)
 
