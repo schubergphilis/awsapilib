@@ -146,7 +146,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         self._core_accounts = None
 
     @property
-    def _account_factory(self):
+    def account_factory(self):
         if any([not self.is_deployed,
                 self.percentage_complete != 100]):
             return None
@@ -245,8 +245,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self.aws_authenticator.get_control_tower_authenticated_session()
 
     @property
-    def _active_artifact(self):
-        artifacts = self.service_catalog.list_provisioning_artifacts(ProductId=self._account_factory.product_id)
+    def active_artifact(self):
+        artifacts = self.service_catalog.list_provisioning_artifacts(ProductId=self.account_factory.product_id)
         return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
                      if artifact.get('Active')),
                     None)
@@ -726,9 +726,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 return False
         while self.busy:
             time.sleep(1)
-        arguments = {'ProductId': self._account_factory.product_id,
+        arguments = {'ProductId': self.account_factory.product_id,
                      'ProvisionedProductName': product_name,
-                     'ProvisioningArtifactId': self._active_artifact.get('Id'),
+                     'ProvisioningArtifactId': self.active_artifact.get('Id'),
                      'ProvisioningParameters': [{'Key': 'AccountName',
                                                  'Value': account_name},
                                                 {'Key': 'AccountEmail',
