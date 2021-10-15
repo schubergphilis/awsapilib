@@ -147,6 +147,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @property
     def account_factory(self):
+        """The AccountFactory object"""
         if any([not self.is_deployed,
                 self.percentage_complete != 100]):
             return None
@@ -246,6 +247,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @property
     def active_artifact(self):
+        """The artifact details if the artifact is active."""
         artifacts = self.service_catalog.list_provisioning_artifacts(ProductId=self.account_factory.product_id)
         return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
                      if artifact.get('Active')),
@@ -267,13 +269,15 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             raise UnsupportedTarget(target)
         return target
 
-    def get_api_payload(self,  # pylint: disable=too-many-arguments
-                        content_string,
-                        target,
-                        method='POST',
-                        params=None,
-                        path=None,
-                        region=None):
+    def get_api_payload(self,
+                        *,
+                        content_string: str,
+                        target: str,
+                        method: str = 'POST',
+                        params: Optional[str] = None,
+                        path: Optional[str] = None,
+                        region: Optional[str] = None) -> dict:
+        """Constructs the API payload."""
         target = self._validate_target(target)
         payload = {'contentString': json.dumps(content_string),
                    'headers': {'Content-Type': self.api_content_type,
