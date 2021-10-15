@@ -156,7 +156,7 @@ class GuardRail(LoggerMixin):
     @property
     def compliancy_status(self):
         """Compliancy status."""
-        payload = self.control_tower.get_api_payload(content_string={'GuardrailName': self.name},  # pylint: disable=protected-access
+        payload = self.control_tower.get_api_payload(content_string={'GuardrailName': self.name},
                                                      target='getGuardrailComplianceStatus')
         self.logger.debug('Trying to get the compliancy status with payload "%s"', payload)
         response = self.control_tower.session.post(self.control_tower.url, json=payload)

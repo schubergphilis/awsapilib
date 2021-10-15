@@ -441,7 +441,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     def _register_org_ou_in_control_tower(self, org_ou):
         self.logger.debug('Registering or re-registering OU under Control Tower')
         payload = self.get_api_payload(content_string={'OrganizationalUnitId': org_ou.id,
-                                                        'OrganizationalUnitName': org_ou.name},
+                                                       'OrganizationalUnitName': org_ou.name},
                                        target='manageOrganizationalUnit')
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -1098,11 +1098,11 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         configuration = {'OrganizationStructure': accounts,
                          'RegionConfigurationList': region_list}
         payload = self.get_api_payload(content_string={'Configuration': configuration,
-                                                        'HomeRegion': self.region,
-                                                        'LogAccountEmail': logging_account_email,
-                                                        'SecurityAccountEmail': security_account_email,
-                                                        'RegionConfigurationList': region_list,
-                                                        'SetupLandingZoneActionType': 'CREATE'},
+                                                       'HomeRegion': self.region,
+                                                       'LogAccountEmail': logging_account_email,
+                                                       'SecurityAccountEmail': security_account_email,
+                                                       'RegionConfigurationList': region_list,
+                                                       'SetupLandingZoneActionType': 'CREATE'},
                                        target='setupLandingZone')
         self.logger.debug('Trying to deploy control tower with payload "%s"', payload)
         return self._deploy(payload, retries, wait)
@@ -1181,10 +1181,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if not security_account:
             raise ServiceCallFailed('Could not retrieve security account to get the email.')
         payload = self.get_api_payload(content_string={'HomeRegion': self.region,
-                                                        'LogAccountEmail': log_account.email,
-                                                        'SecurityAccountEmail': security_account.email,
-                                                        'RegionConfigurationList': region_list,
-                                                        'SetupLandingZoneActionType': 'REPAIR'},
+                                                       'LogAccountEmail': log_account.email,
+                                                       'SecurityAccountEmail': security_account.email,
+                                                       'RegionConfigurationList': region_list,
+                                                       'SetupLandingZoneActionType': 'REPAIR'},
                                        target='setupLandingZone')
         self.logger.debug('Trying to repair control tower with payload "%s"', payload)
         return self._deploy(payload)
