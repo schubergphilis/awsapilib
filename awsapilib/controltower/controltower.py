@@ -147,7 +147,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @property
     def account_factory(self):
-        """The AccountFactory object"""
+        """The AccountFactory object."""
         if any([not self.is_deployed,
                 self.percentage_complete != 100]):
             return None
@@ -290,7 +290,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                    'region': region or self.region}
         return copy.deepcopy(payload)
 
-    def _get_paginated_results(self,  # pylint: disable=too-many-arguments
+    def _get_paginated_results(self,
+                               *,
                                content_payload,
                                target,
                                object_group=None,
