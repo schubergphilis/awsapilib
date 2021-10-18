@@ -284,11 +284,15 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
         return self._data_.get('DeployedLandingZoneVersion')
 
     @property
-    def has_available_update(self):
+    def has_available_update(self) -> bool:
         """If the account is behind the landing zone version."""
         if self.provision_state == 'PROVISION_FAILED':
             return False
-        return float(self.landing_zone_version) < float(self.control_tower.landing_zone_version)
+        # Default accounts don't have an artifact ID, so we can't check them for an update
+        conditions = [float(self.landing_zone_version) < float(self.control_tower.landing_zone_version),
+                      self.control_tower.active_artifact_id
+                      != self.provisioning_artifact_id if self.provisioning_artifact_id else False]
+        return any(conditions)
 
     @property
     def guardrail_compliance_status(self):
@@ -473,7 +477,7 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
             raise ControlTowerBusy
         arguments = {'ProductId': self.control_tower._account_factory.product_id,  # pylint: disable=protected-access
                      'ProvisionedProductName': self.name,
-                     'ProvisioningArtifactId': self.control_tower._active_artifact.get('Id'),  # pylint: disable=protected-access
+                     'ProvisioningArtifactId': self.control_tower.active_artifact_id,
                      'ProvisioningParameters': [{'Key': 'AccountName',
                                                  'Value': self.name,
                                                  'UsePreviousValue': True},

@@ -45,6 +45,8 @@ import botocore
 import requests
 from boto3_type_annotations.organizations import Client as OrganizationsClient
 from boto3_type_annotations.servicecatalog import Client as ServicecatalogClient
+from cachetools import cached
+from cachetools import TTLCache
 from opnieuw import retry
 
 from awsapilib.authentication import Authenticator, LoggerMixin
@@ -58,7 +60,8 @@ from .controltowerexceptions import (UnsupportedTarget,
                                      EmailCheckFailed,
                                      EmailInUse,
                                      UnavailableRegion,
-                                     RoleCreationFailure)
+                                     RoleCreationFailure,
+                                     NoActiveArtifactRetrieved)
 from .resources import (LOGGER,
                         LOGGER_BASENAME,
                         ServiceControlPolicy,
@@ -147,6 +150,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @property
     def _account_factory(self):
+        """The AccountFactory object."""
         if any([not self.is_deployed,
                 self.percentage_complete != 100]):
             return None
@@ -245,11 +249,24 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self.aws_authenticator.get_control_tower_authenticated_session()
 
     @property
+    def active_artifact_id(self) -> str:
+        """Contains the id of the active artifact.
+
+        Returns:
+            str with the artifact id or an empty string
+
+        """
+        return self._active_artifact.get('Id', '')
+
+    @property
+    @cached(cache=TTLCache(maxsize=1, ttl=20))
     def _active_artifact(self):
         artifacts = self.service_catalog.list_provisioning_artifacts(ProductId=self._account_factory.product_id)
-        return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
-                     if artifact.get('Active')),
-                    None)
+        try:
+            return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
+                         if artifact.get('Active')))
+        except StopIteration:
+            raise NoActiveArtifactRetrieved('Could not retrieve the active artifact from service catalog.')
 
     @staticmethod
     def _get_account_factory(service_catalog_client):
@@ -267,13 +284,15 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             raise UnsupportedTarget(target)
         return target
 
-    def _get_api_payload(self,  # pylint: disable=too-many-arguments
-                         content_string,
-                         target,
-                         method='POST',
-                         params=None,
-                         path=None,
-                         region=None):
+    def _get_api_payload(self,
+                         *,
+                         content_string: str,
+                         target: str,
+                         method: str = 'POST',
+                         params: Optional[dict] = None,
+                         path: Optional[str] = None,
+                         region: Optional[str] = None) -> dict:
+        """Constructs the API payload."""
         target = self._validate_target(target)
         payload = {'contentString': json.dumps(content_string),
                    'headers': {'Content-Type': self.api_content_type,
@@ -286,7 +305,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                    'region': region or self.region}
         return copy.deepcopy(payload)
 
-    def _get_paginated_results(self,  # pylint: disable=too-many-arguments
+    def _get_paginated_results(self,
+                               *,
                                content_payload,
                                target,
                                object_group=None,
