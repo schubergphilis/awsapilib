@@ -45,6 +45,8 @@ import botocore
 import requests
 from boto3_type_annotations.organizations import Client as OrganizationsClient
 from boto3_type_annotations.servicecatalog import Client as ServicecatalogClient
+from cachetools import cached
+from cachetools import TTLCache
 from opnieuw import retry
 
 from awsapilib.authentication import Authenticator, LoggerMixin
@@ -58,7 +60,8 @@ from .controltowerexceptions import (UnsupportedTarget,
                                      EmailCheckFailed,
                                      EmailInUse,
                                      UnavailableRegion,
-                                     RoleCreationFailure)
+                                     RoleCreationFailure,
+                                     NoActiveArtifactRetrieved)
 from .resources import (LOGGER,
                         LOGGER_BASENAME,
                         ServiceControlPolicy,
@@ -256,12 +259,14 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self._active_artifact.get('Id', '')
 
     @property
+    @cached(cache=TTLCache(maxsize=1, ttl=20))
     def _active_artifact(self):
-        """The artifact details if the artifact is active."""
         artifacts = self.service_catalog.list_provisioning_artifacts(ProductId=self._account_factory.product_id)
-        return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
-                     if artifact.get('Active')),
-                    None)
+        try:
+            return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
+                         if artifact.get('Active')))
+        except StopIteration:
+            raise NoActiveArtifactRetrieved('Could not retrieve the active artifact from service catalog.')
 
     @staticmethod
     def _get_account_factory(service_catalog_client):

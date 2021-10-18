@@ -92,3 +92,7 @@ class UnavailableRegion(Exception):
 
 class RoleCreationFailure(Exception):
     """Unable to create the required roles for the deployment of control tower, manual clean up is required."""
+
+
+class NoActiveArtifactRetrieved(Exception):
+    """Could not retrieve an active artifact"""
