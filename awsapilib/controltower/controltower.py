@@ -146,7 +146,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         self._core_accounts = None
 
     @property
-    def account_factory(self):
+    def _account_factory(self):
         """The AccountFactory object."""
         if any([not self.is_deployed,
                 self.percentage_complete != 100]):
@@ -161,9 +161,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if not self._is_deployed:
             caller_region = self.aws_authenticator.region
             url = f'https://{caller_region}.console.aws.amazon.com/controltower/api/controltower'
-            payload = self.get_api_payload(content_string={},
-                                           target='getLandingZoneStatus',
-                                           region=caller_region)
+            payload = self._get_api_payload(content_string={},
+                                            target='getLandingZoneStatus',
+                                            region=caller_region)
             self.logger.debug('Trying to get the deployed status of the landing zone with payload "%s"', payload)
             response = self.session.post(url, json=payload)
             if not response.ok:
@@ -184,7 +184,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if self._region is None:
             caller_region = self.aws_authenticator.region
             url = f'https://{caller_region}.console.aws.amazon.com/controltower/api/controltower'
-            payload = self.get_api_payload(content_string={}, target='getHomeRegion', region=caller_region)
+            payload = self._get_api_payload(content_string={}, target='getHomeRegion', region=caller_region)
             response = self.session.post(url, json=payload)
             if not response.ok:
                 raise ServiceCallFailed(payload)
@@ -220,8 +220,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if self._core_accounts is None:
             core_accounts = []
             for account_type in self.core_account_types:
-                payload = self.get_api_payload(content_string={'AccountType': account_type},
-                                               target='describeCoreService')
+                payload = self._get_api_payload(content_string={'AccountType': account_type},
+                                                target='describeCoreService')
                 response = self.session.post(self.url, json=payload)
                 if not response.ok:
                     raise ServiceCallFailed(f'Service call failed with payload {payload}')
@@ -246,9 +246,20 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self.aws_authenticator.get_control_tower_authenticated_session()
 
     @property
-    def active_artifact(self):
+    def active_artifact_id(self) -> str:
+        """Contains the id of the active artifact.
+
+        Returns:
+            str with the artifact id or an empty string
+
+
+        """
+        return self._active_artifact.get('Id', '')
+
+    @property
+    def _active_artifact(self):
         """The artifact details if the artifact is active."""
-        artifacts = self.service_catalog.list_provisioning_artifacts(ProductId=self.account_factory.product_id)
+        artifacts = self.service_catalog.list_provisioning_artifacts(ProductId=self._account_factory.product_id)
         return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
                      if artifact.get('Active')),
                     None)
@@ -269,14 +280,14 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             raise UnsupportedTarget(target)
         return target
 
-    def get_api_payload(self,
-                        *,
-                        content_string: str,
-                        target: str,
-                        method: str = 'POST',
-                        params: Optional[str] = None,
-                        path: Optional[str] = None,
-                        region: Optional[str] = None) -> dict:
+    def _get_api_payload(self,
+                         *,
+                         content_string: str,
+                         target: str,
+                         method: str = 'POST',
+                         params: Optional[str] = None,
+                         path: Optional[str] = None,
+                         region: Optional[str] = None) -> dict:
         """Constructs the API payload."""
         target = self._validate_target(target)
         payload = {'contentString': json.dumps(content_string),
@@ -301,12 +312,12 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                path=None,
                                region=None,
                                next_token_marker='NextToken'):
-        payload = self.get_api_payload(content_string=content_payload,
-                                       target=target,
-                                       method=method,
-                                       params=params,
-                                       path=f'/{path}/' if path else '/',
-                                       region=region)
+        payload = self._get_api_payload(content_string=content_payload,
+                                        target=target,
+                                        method=method,
+                                        params=params,
+                                        path=f'/{path}/' if path else '/',
+                                        region=region)
         response, next_token = self._get_partial_response(payload, next_token_marker)
         if not object_group:
             yield response.json()
@@ -445,9 +456,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def _register_org_ou_in_control_tower(self, org_ou):
         self.logger.debug('Registering or re-registering OU under Control Tower')
-        payload = self.get_api_payload(content_string={'OrganizationalUnitId': org_ou.id,
-                                                       'OrganizationalUnitName': org_ou.name},
-                                       target='manageOrganizationalUnit')
+        payload = self._get_api_payload(content_string={'OrganizationalUnitId': org_ou.id,
+                                                        'OrganizationalUnitName': org_ou.name},
+                                        target='manageOrganizationalUnit')
         response = self.session.post(self.url, json=payload)
         if not response.ok:
             self.logger.error('Failed to register OU "%s" to Control Tower with response status "%s" '
@@ -459,8 +470,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def _is_busy_with_ou_guardrails(self):
         """The status of guardrails application for OUs in control tower."""
-        payload = self.get_api_payload(content_string={'OrganizationUnitStatus': 'IN_PROGRESS'},
-                                       target='listManagedOrganizationalUnits')
+        payload = self._get_api_payload(content_string={'OrganizationUnitStatus': 'IN_PROGRESS'},
+                                        target='listManagedOrganizationalUnits')
         self.logger.debug('Trying to get the status of OU guardrails application with payload "%s"', payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -485,8 +496,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if not organizational_unit:
             self.logger.error('No organizational unit with name :"%s" registered with Control Tower', name)
             return False
-        payload = self.get_api_payload(content_string={'OrganizationalUnitId': organizational_unit.id},
-                                       target='deregisterOrganizationalUnit')
+        payload = self._get_api_payload(content_string={'OrganizationalUnitId': organizational_unit.id},
+                                        target='deregisterOrganizationalUnit')
         self.logger.debug('Trying to unregister OU "%s" with payload "%s"', name, payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -731,9 +742,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 return False
         while self.busy:
             time.sleep(1)
-        arguments = {'ProductId': self.account_factory.product_id,
+        arguments = {'ProductId': self._account_factory.product_id,
                      'ProvisionedProductName': product_name,
-                     'ProvisioningArtifactId': self.active_artifact.get('Id'),
+                     'ProvisioningArtifactId': self._active_artifact.get('Id'),
                      'ProvisioningParameters': [{'Key': 'AccountName',
                                                  'Value': account_name},
                                                 {'Key': 'AccountEmail',
@@ -837,8 +848,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                            for region in self.get_available_regions()]
             content.update({'SetupLandingZoneActionType': 'UPDATE',
                             'RegionConfigurationList': region_list})
-        return self.get_api_payload(content_string=content,
-                                    target='setupLandingZone')
+        return self._get_api_payload(content_string=content,
+                                     target='setupLandingZone')
 
     @property
     def busy(self):
@@ -881,8 +892,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 for region in self.region_metadata_list if region.get('RegionStatus') == 'NOT_GOVERNED']
 
     def _get_status(self):
-        payload = self.get_api_payload(content_string={},
-                                       target='getLandingZoneStatus')
+        payload = self._get_api_payload(content_string={},
+                                        target='getLandingZoneStatus')
         self.logger.debug('Trying to get the landing zone status with payload "%s"', payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -896,8 +907,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     @validate_availability
     def drift_messages(self):
         """Drift messages."""
-        payload = self.get_api_payload(content_string={},
-                                       target='listDriftDetails')
+        payload = self._get_api_payload(content_string={},
+                                        target='listDriftDetails')
         self.logger.debug('Trying to get the drift messages of the landing zone with payload "%s"', payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -946,8 +957,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     @property
     def _account_factory_config(self):
         """The config of the account factory."""
-        payload = self.get_api_payload(content_string={},
-                                       target='describeAccountFactoryConfig')
+        payload = self._get_api_payload(content_string={},
+                                        target='describeAccountFactoryConfig')
         self.logger.debug('Trying to get the account factory config of the landing zone with payload "%s"', payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -959,8 +970,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def _pre_deploy_check(self):
         """Pre deployment check."""
-        payload = self.get_api_payload(content_string={},
-                                       target='performPreLaunchChecks')
+        payload = self._get_api_payload(content_string={},
+                                        target='performPreLaunchChecks')
         self.logger.debug('Trying the pre deployment check with payload "%s"', payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -972,8 +983,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def is_email_used(self, email):
         """Check email for availability to be used or if it is already in use."""
-        payload = self.get_api_payload(content_string={'AccountEmail': email},
-                                       target='getAccountInfo')
+        payload = self._get_api_payload(content_string={'AccountEmail': email},
+                                        target='getAccountInfo')
         self.logger.debug('Trying to check email with payload "%s"', payload)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
@@ -1102,13 +1113,13 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                      'OrganizationalUnitType': 'CUSTOM'}]
         configuration = {'OrganizationStructure': accounts,
                          'RegionConfigurationList': region_list}
-        payload = self.get_api_payload(content_string={'Configuration': configuration,
-                                                       'HomeRegion': self.region,
-                                                       'LogAccountEmail': logging_account_email,
-                                                       'SecurityAccountEmail': security_account_email,
-                                                       'RegionConfigurationList': region_list,
-                                                       'SetupLandingZoneActionType': 'CREATE'},
-                                       target='setupLandingZone')
+        payload = self._get_api_payload(content_string={'Configuration': configuration,
+                                                        'HomeRegion': self.region,
+                                                        'LogAccountEmail': logging_account_email,
+                                                        'SecurityAccountEmail': security_account_email,
+                                                        'RegionConfigurationList': region_list,
+                                                        'SetupLandingZoneActionType': 'CREATE'},
+                                        target='setupLandingZone')
         self.logger.debug('Trying to deploy control tower with payload "%s"', payload)
         return self._deploy(payload, retries, wait)
 
@@ -1147,9 +1158,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             response (bool): True if the process starts successfully, False otherwise.
 
         """
-        payload = self.get_api_payload(content_string={},
-                                       target='deleteLandingZone',
-                                       region=self.region)
+        payload = self._get_api_payload(content_string={},
+                                        target='deleteLandingZone',
+                                        region=self.region)
         response = self.session.post(self.url, json=payload)
         if not response.ok:
             self.logger.error('Failed to decommission control tower with response status "%s" and response text "%s"',
@@ -1185,11 +1196,11 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         security_account = next((account for account in self.core_accounts if account.label == 'SECURITY'), None)
         if not security_account:
             raise ServiceCallFailed('Could not retrieve security account to get the email.')
-        payload = self.get_api_payload(content_string={'HomeRegion': self.region,
-                                                       'LogAccountEmail': log_account.email,
-                                                       'SecurityAccountEmail': security_account.email,
-                                                       'RegionConfigurationList': region_list,
-                                                       'SetupLandingZoneActionType': 'REPAIR'},
-                                       target='setupLandingZone')
+        payload = self._get_api_payload(content_string={'HomeRegion': self.region,
+                                                        'LogAccountEmail': log_account.email,
+                                                        'SecurityAccountEmail': security_account.email,
+                                                        'RegionConfigurationList': region_list,
+                                                        'SetupLandingZoneActionType': 'REPAIR'},
+                                        target='setupLandingZone')
         self.logger.debug('Trying to repair control tower with payload "%s"', payload)
         return self._deploy(payload)

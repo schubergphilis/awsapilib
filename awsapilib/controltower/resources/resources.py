@@ -156,8 +156,8 @@ class GuardRail(LoggerMixin):
     @property
     def compliancy_status(self):
         """Compliancy status."""
-        payload = self.control_tower.get_api_payload(content_string={'GuardrailName': self.name},
-                                                     target='getGuardrailComplianceStatus')
+        payload = self.control_tower._get_api_payload(content_string={'GuardrailName': self.name},  # pylint: disable=protected-access
+                                                      target='getGuardrailComplianceStatus')
         self.logger.debug('Trying to get the compliancy status with payload "%s"', payload)
         response = self.control_tower.session.post(self.control_tower.url, json=payload)
         if not response.ok:
@@ -290,7 +290,7 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
             return False
         # Default accounts don't have an artifact ID, so we can't check them for an update
         conditions = [float(self.landing_zone_version) < float(self.control_tower.landing_zone_version),
-                      self.control_tower.active_artifact.get('Id', '')
+                      self.control_tower.active_artifact_id
                       != self.provisioning_artifact_id if self.provisioning_artifact_id else False]
         return any(conditions)
 
@@ -302,8 +302,8 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
             status (str): COMPLIANT|NON COMPLIANT
 
         """
-        payload = self.control_tower.get_api_payload(content_string={'AccountId': self.id},
-                                                     target='getGuardrailComplianceStatus')
+        payload = self.control_tower._get_api_payload(content_string={'AccountId': self.id},  # pylint: disable=protected-access
+                                                      target='getGuardrailComplianceStatus')
         response = self.control_tower.session.post(self.control_tower.url, json=payload)
         if not response.ok:
             self.logger.error('Failed to get compliancy status from api.')
@@ -475,9 +475,9 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
             return True
         if self.control_tower.busy:
             raise ControlTowerBusy
-        arguments = {'ProductId': self.control_tower.account_factory.product_id,
+        arguments = {'ProductId': self.control_tower._account_factory.product_id,  # pylint: disable=protected-access
                      'ProvisionedProductName': self.name,
-                     'ProvisioningArtifactId': self.control_tower.active_artifact.get('Id'),
+                     'ProvisioningArtifactId': self.control_tower.active_artifact_id,
                      'ProvisioningParameters': [{'Key': 'AccountName',
                                                  'Value': self.name,
                                                  'UsePreviousValue': True},
