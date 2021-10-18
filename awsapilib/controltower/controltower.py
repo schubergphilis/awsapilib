@@ -252,7 +252,6 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         Returns:
             str with the artifact id or an empty string
 
-
         """
         return self._active_artifact.get('Id', '')
 
