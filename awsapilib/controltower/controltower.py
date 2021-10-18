@@ -284,7 +284,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                          content_string: str,
                          target: str,
                          method: str = 'POST',
-                         params: Optional[str] = None,
+                         params: Optional[dict] = None,
                          path: Optional[str] = None,
                          region: Optional[str] = None) -> dict:
         """Constructs the API payload."""
