@@ -115,3 +115,9 @@ History
 ------------------
 
 * - Adding a force option to the register_ou function to force re-registering
+
+
+0.9.0 (18-10-2021)
+------------------
+
+* - Adding support to also show updated state when the landingzone gets a new configuration
