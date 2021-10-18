@@ -95,4 +95,4 @@ class RoleCreationFailure(Exception):
 
 
 class NoActiveArtifactRetrieved(Exception):
-    """Could not retrieve an active artifact"""
+    """Could not retrieve an active artifact."""
