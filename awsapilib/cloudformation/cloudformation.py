@@ -115,7 +115,10 @@ class StackSet:
         return self._set_organizations_trusted_access(endpoint)
 
     def _set_organizations_trusted_access(self, endpoint):
-        response = self._cloudformation.session.post(f'{self._api_url}/{endpoint}', params=self._region_payload)
-        if not response.ok:
+        response = self._cloudformation.session.post(f'{self._api_url}/{endpoint}',
+                                                     params=self._region_payload,
+                                                     json={})
+        LOGGER.debug(f'{response.text}, {response.status_code}')
+        if any([not response.ok, 'Error' in response.json()]):
             raise ServerError(f'Error, response received : {response.text}')
         return True

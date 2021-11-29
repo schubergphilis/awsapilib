@@ -520,8 +520,7 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
                                                             FilterCookie('cfn_sessId', ),
                                                             FilterCookie('aws-csds-token', ),
                                                             FilterCookie('aws-consoleInfo', ),
-                                                            FilterCookie('aws-creds', f'/{service}')
-                                                            ])
+                                                            FilterCookie('aws-creds', f'/{service}')])
         dashboard = self._get_response(oauth_challenge.headers.get('Location'),
                                        extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
                                                       FilterCookie('aws-csds-token', ),
@@ -530,7 +529,12 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
                                         attributes={'id': 'console-preload-data'},
                                         attribute_value='data-xsrf-token',
                                         headers_name='x-cfn-xsrf-token')
-        extra_cookies = [FilterCookie('aws-creds', f'/{service}')]
+        extra_cookies = [FilterCookie('aws-creds-code-verifier', f'/{service}'),
+                         FilterCookie('aws-consoleInfo', f'/{service}'),
+                         FilterCookie('cfn_sessId', f'/{service}'),
+                         FilterCookie('aws-creds', f'/{service}'),
+                         FilterCookie('aws-userInfo-signed',),
+                         FilterCookie('awsccc',)]
         return self._get_session_from_console(dashboard,
                                               csrf_token_data,
                                               extra_cookies,
