@@ -121,3 +121,9 @@ History
 ------------------
 
 * - Adding support to also show updated state when the landingzone gets a new configuration
+
+
+0.10.0 (29-11-2021)
+-------------------
+
+* Implemented cloudformation stack set organizations trusted access enabling and disabling.
