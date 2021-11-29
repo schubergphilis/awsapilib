@@ -127,3 +127,9 @@ History
 -------------------
 
 * Implemented cloudformation stack set organizations trusted access enabling and disabling.
+
+
+0.10.1 (29-11-2021)
+-------------------
+
+* Added missing dependencies.
