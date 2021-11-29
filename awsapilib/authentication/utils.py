@@ -126,6 +126,15 @@ class HarParser:
         """
         return self._get_text_from_calls(self._get_service_calls('billing'))
 
+    def get_communication_for_cloudformation(self):
+        """Returns a text of the communication of a valid login to cloud formation service.
+
+        Returns:
+            text (str): Returns a text of the communication of a valid login to cloud formation service.
+
+        """
+        return self._get_text_from_calls(self._get_service_calls('cloudformation'))
+
     def render_communication_for_console(self):
         """Prints a text of the communication of a valid login to console.
 
@@ -161,3 +170,12 @@ class HarParser:
 
         """
         print(self.get_communication_for_billing())
+
+    def render_communication_for_cloudformation(self):
+        """Prints a text of the communication of a valid login to cloud formation service.
+
+        Returns:
+            None
+
+        """
+        print(self.get_communication_for_cloudformation())

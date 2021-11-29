@@ -408,7 +408,10 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
                                                       FilterCookie('JSESSIONID', host),
                                                       FilterCookie('aws-consoleInfo'),
                                                       FilterCookie('aws-userInfo-signed')])
-        csrf_token_data = CsrfTokenData('meta', {'name': 'awsc-csrf-token'}, 'content', 'X-CSRF-TOKEN')
+        csrf_token_data = CsrfTokenData(entity_type='meta',
+                                        attributes={'name': 'awsc-csrf-token'},
+                                        attribute_value='content',
+                                        headers_name='X-CSRF-TOKEN')
         extra_cookies = [FilterCookie('JSESSIONID', self.domains.regional_console),
                          FilterCookie('aws-creds', f'{self.domains.regional_console}/{service}')]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
@@ -441,7 +444,10 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
         dashboard = self._get_response(oauth_challenge.headers.get('Location'),
                                        extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
                                                       FilterCookie('JSESSIONID', host)])
-        csrf_token_data = CsrfTokenData('meta', {'name': 'awsc-csrf-token'}, 'content', 'X-CSRF-TOKEN')
+        csrf_token_data = CsrfTokenData(entity_type='meta',
+                                        attributes={'name': 'awsc-csrf-token'},
+                                        attribute_value='content',
+                                        headers_name='X-CSRF-TOKEN')
         extra_cookies = [FilterCookie('JSESSIONID', self.domains.regional_console),
                          FilterCookie('aws-creds', f'{self.domains.regional_console}/{service}')]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
@@ -476,11 +482,70 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
         dashboard = self._get_response(oauth_challenge.headers.get('Location'),
                                        extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
                                                       FilterCookie('JSESSIONID', host)])
-        csrf_token_data = CsrfTokenData('input', {'id': 'xsrfToken'}, 'value', 'x-awsbc-xsrf-token')
-        extra_cookies = [FilterCookie('aws-creds', '/billing')]
+        csrf_token_data = CsrfTokenData(entity_type='input',
+                                        attributes={'id': 'xsrfToken'},
+                                        attribute_value='value',
+                                        headers_name='x-awsbc-xsrf-token')
+        extra_cookies = [FilterCookie('aws-creds', f'/{service}')]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
-    def _get_session_from_console(self, console_page_response, csrf_token_data, extra_cookies=None):
+    def get_cloudformation_authenticated_session(self):
+        """Authenticates to cloudformation and returns an authenticated session.
+
+        Returns:
+            session (requests.Session): An authenticated session with headers and cookies set.
+
+        """
+        service = 'cloudformation'
+        url = f'{self.urls.regional_console}/{service}/home?region={self.region}'
+        self._get_response(self.get_signed_url())
+        host = urllib.parse.urlparse(url)[1]
+        self.logger.debug('Setting host to: %s', host)
+        self._get_response(url, extra_cookies=[FilterCookie('aws-consoleInfo',),
+                                               FilterCookie('cfn_sessId', ),
+                                               FilterCookie('aws-csds-token', ),
+                                               FilterCookie('aws-creds-code-verifier', )])
+        hash_args = self._get_response(url,
+                                       params={'state': 'hashArgs#'},
+                                       extra_cookies=[FilterCookie('aws-userInfo-signed', ),
+                                                      FilterCookie('cfn_sessId', ),
+                                                      FilterCookie('aws-csds-token', ),
+                                                      FilterCookie('aws-creds-code-verifier', f'/{service}')])
+        oauth = self._get_response(hash_args.headers.get('Location'),
+                                   extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
+                                                  FilterCookie('cfn_sessId', ),
+                                                  FilterCookie('aws-csds-token', ),
+                                                  FilterCookie('aws-userInfo-signed', )])
+        oauth_challenge = self._get_response(oauth.headers.get('Location'),
+                                             extra_cookies=[FilterCookie('aws-userInfo-signed', ),
+                                                            FilterCookie('cfn_sessId', ),
+                                                            FilterCookie('aws-csds-token', ),
+                                                            FilterCookie('aws-consoleInfo', ),
+                                                            FilterCookie('aws-creds', f'/{service}')])
+        dashboard = self._get_response(oauth_challenge.headers.get('Location'),
+                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
+                                                      FilterCookie('aws-csds-token', ),
+                                                      FilterCookie('cfn_sessId', )])
+        csrf_token_data = CsrfTokenData(entity_type='div',
+                                        attributes={'id': 'console-preload-data'},
+                                        attribute_value='data-xsrf-token',
+                                        headers_name='x-cfn-xsrf-token')
+        extra_cookies = [FilterCookie('aws-creds-code-verifier', f'/{service}'),
+                         FilterCookie('aws-consoleInfo', f'/{service}'),
+                         FilterCookie('cfn_sessId', f'/{service}'),
+                         FilterCookie('aws-creds', f'/{service}'),
+                         FilterCookie('aws-userInfo-signed',),
+                         FilterCookie('awsccc',)]
+        return self._get_session_from_console(dashboard,
+                                              csrf_token_data,
+                                              extra_cookies,
+                                              token_transform=lambda x: json.loads(x.replace('\\', '')).get('token'))
+
+    def _get_session_from_console(self,
+                                  console_page_response,
+                                  csrf_token_data,
+                                  extra_cookies=None,
+                                  token_transform=lambda x: x):
         soup = Bfs(console_page_response.text, features='html.parser')
         try:
             csrf_token = soup.find(csrf_token_data.entity_type,
@@ -494,7 +559,7 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
         cookies = self._filter_cookies(self._session.cookies, cookies_to_filter)
         session.headers.update(self._default_headers)
         session.headers.update({'Cookie': self._header_cookie_from_cookies(cookies),
-                                csrf_token_data.headers_name: csrf_token})
+                                csrf_token_data.headers_name: token_transform(csrf_token)})
         for cookie in cookies:
             session.cookies.set_cookie(cookie)
         return session
