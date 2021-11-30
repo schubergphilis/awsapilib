@@ -44,3 +44,15 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 class NotSolverInstance(Exception):
     """The object provided was not of Solver type."""
+
+
+class InvalidAuthentication(Exception):
+    """The authentication did not succeed."""
+
+
+class ServerError(Exception):
+    """Unknown server error occured."""
+
+
+class UnableToResolveAccount(Exception):
+    """Unable to resolve the account type."""

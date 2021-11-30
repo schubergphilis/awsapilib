@@ -113,6 +113,8 @@ class Urls:
     root: str = f'{scheme}{root_domain}'
     sign_in: str = f'{scheme}signin.{root_domain}'
     console: str = f'{scheme}console.{root_domain}'
+    console_home: str = f'{scheme}console.{root_domain}/console/home'
+    billing_home: str = f'{scheme}console.{root_domain}/billing/home'
     federation: str = f'{sign_in}/federation'
 
     @property
@@ -124,6 +126,16 @@ class Urls:
 
         """
         return f'{self.scheme}{self.region}.console.{self.root_domain}'
+
+    @property
+    def regional_console_home(self):
+        """The url of the regional console home page.
+
+        Returns:
+            regional_console (str): The regional console home page url.
+
+        """
+        return f'{self.scheme}{self.region}.console.{self.root_domain}/console/home'
 
     @property
     def regional_single_sign_on(self):
@@ -170,10 +182,143 @@ class LoggerMixin:  # pylint: disable=too-few-public-methods
         return logging.getLogger(f'{LOGGER_BASENAME}.{self.__class__.__name__}')
 
 
-class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attributes
+class BaseAuthenticator(LoggerMixin):  # pylint: disable=too-few-public-methods
+    """Interfaces with aws authentication mechanisms, providing pre signed urls, or authenticated sessions."""
+
+    def __init__(self, region=None):
+        self._session = requests.Session()
+        self.region = region
+        self.urls = Urls(self.region)
+        self.domains = Domains(self.region)
+
+    @staticmethod
+    def _filter_cookies(cookies, filters=None):
+        result_cookies = []
+        for filter_ in filters:
+            for cookie in cookies:
+                conditions = [cookie.name == filter_.name]
+                if filter_.exact_match:
+                    conditions.extend([filter_.domain == f'{cookie.domain}{cookie.path}'])
+                elif filter_.domain:
+                    conditions.extend([filter_.domain in f'{cookie.domain}{cookie.path}'])
+                if all(conditions):
+                    result_cookies.append(cookie)
+        return result_cookies
+
+    @staticmethod
+    def _cookies_to_dict(cookies):
+        return {cookie.name: cookie.value for cookie in cookies}
+
+    @staticmethod
+    def _header_cookie_from_cookies(cookies):
+        return '; '.join([f'{key}={value}'
+                          for key, value in BaseAuthenticator._cookies_to_dict(cookies).items()])
+
+    @property
+    def _default_headers(self):
+        return deepcopy({'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                         'Accept-Encoding': 'gzip, deflate, br',
+                         'Accept-Language': 'en-US,en;q=0.5',
+                         'Connection': 'keep-alive',
+                         'Upgrade-Insecure-Requests': '1',
+                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:73.0) '
+                                       'Gecko/20100101 Firefox/73.0'})
+
+    @property
+    def _standard_cookies(self):
+        return [FilterCookie('aws-account-data'),
+                FilterCookie('aws-ubid-main'),
+                FilterCookie('aws-userInfo'),
+                FilterCookie('awsc-actm'),
+                FilterCookie('awsm-vid')]
+
+    def _get_response(self, url, params=None, extra_cookies=None, headers=None):
+        extra_cookies = extra_cookies or []
+        headers = headers or {}
+        cookies_to_filter = self._standard_cookies + extra_cookies
+        headers.update(self._default_headers)
+        cookies = self._filter_cookies(self._session.cookies, cookies_to_filter)
+        headers['Cookie'] = self._header_cookie_from_cookies(cookies)
+        arguments = {'url': url,
+                     'headers': headers,
+                     'cookies': self._cookies_to_dict(cookies),
+                     'allow_redirects': False}
+        if params:
+            arguments.update({'params': params})
+        self.logger.debug('Getting url :%s with arguments : %s', url, arguments)
+        response = requests.get(**arguments)
+        if not response.ok:
+            try:
+                error_response = Bfs(response.text, features='html.parser')
+                error_title = error_response.title.string.strip()
+                err_msg = error_response.find('div', {'id': 'content'}).find('p').string
+            except AttributeError:
+                raise ValueError('Response received: %s' % response.text)
+            if all([response.status_code == 400, error_title == 'Credentials expired']):
+                raise ExpiredCredentials(response.status_code, err_msg)
+            raise ValueError('Response received: %s' % response.text)
+        self._debug_response(response, cookies)
+        self._session.cookies.update(response.cookies)
+        return response
+
+    @staticmethod
+    def _query_to_params(query):
+        query_lines = query.split('&') if query else []
+        return {line.split('=')[0]: line.split('=')[1] for line in query_lines}
+
+    def _debug_response(self, response, cookies):
+        params = self._query_to_params(urllib.parse.urlparse(response.request.url)[4])
+        self.logger.debug('URL : %s', response.request.url)
+        if params:
+            self.logger.debug('Params : ')
+            for key, value in params.items():
+                self.logger.debug('\t%s : %s', key, value)
+        self.logger.debug('Response status : %s', response.status_code)
+        self.logger.debug('\tRequest Headers :')
+        for name, value in dict(sorted(response.request.headers.items(), key=lambda x: x[0].lower())).items():
+            self.logger.debug('\t\t%s : %s', name, value)
+        self.logger.debug('\tRequest Cookies :')
+        for cookie in sorted(cookies, key=lambda x: x.name.lower()):
+            self.logger.debug('\t\t%s (domain:%s) : %s', cookie.name, cookie.domain, cookie.value)
+        self.logger.debug('\tResponse Headers :')
+        for name, value in dict(sorted(response.headers.items(), key=lambda x: x[0].lower())).items():
+            self.logger.debug('\t\t%s : %s', name, value)
+        self.logger.debug('\tResponse Cookies :')
+        for name, value in dict(sorted(response.cookies.items(), key=lambda x: x[0].lower())).items():
+            self.logger.debug('\t\t%s : %s', name, value)
+        self.logger.debug('Session Cookies :')
+        for cookie in sorted(self._session.cookies, key=lambda x: x.name.lower()):
+            self.logger.debug('\t%s (domain:%s%s) : %s', cookie.name, cookie.domain, cookie.path, cookie.value)
+
+    def _get_session_from_console(self,
+                                  console_page_response,
+                                  csrf_token_data,
+                                  extra_cookies=None,
+                                  token_transform=lambda x: x):
+        soup = Bfs(console_page_response.text, features='html.parser')
+        try:
+            csrf_token = soup.find(csrf_token_data.entity_type,
+                                   csrf_token_data.attributes).attrs.get(csrf_token_data.attribute_value)
+        except AttributeError:
+            raise ValueError('Response received: %s' % console_page_response.text)
+        if not csrf_token:
+            raise NoSigninTokenReceived('Unable to retrieve csrf token.')
+        session = requests.Session()
+        cookies_to_filter = self._standard_cookies + extra_cookies if extra_cookies else []
+        cookies = self._filter_cookies(self._session.cookies, cookies_to_filter)
+        session.headers.update(self._default_headers)
+        session.headers.update({'Cookie': self._header_cookie_from_cookies(cookies),
+                                csrf_token_data.headers_name: token_transform(csrf_token)})
+        for cookie in cookies:
+            session.cookies.set_cookie(cookie)
+        return session
+
+
+class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-attributes
     """Interfaces with aws authentication mechanisms, providing pre signed urls, or authenticated sessions."""
 
     def __init__(self, arn, session_duration=3600, region=None):
+        super().__init__(region=region)
         self.arn = arn
         self.session_duration = session_duration
         self._session = requests.Session()
@@ -266,105 +411,6 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
                   'Destination': destination or self.urls.console,
                   'SigninToken': self._get_signin_token()}
         return f'{self.urls.federation}?{urllib.parse.urlencode(params)}'
-
-    @staticmethod
-    def _filter_cookies(cookies, filters=None):
-        result_cookies = []
-        for filter_ in filters:
-            for cookie in cookies:
-                conditions = [cookie.name == filter_.name]
-                if filter_.exact_match:
-                    conditions.extend([filter_.domain == f'{cookie.domain}{cookie.path}'])
-                elif filter_.domain:
-                    conditions.extend([filter_.domain in f'{cookie.domain}{cookie.path}'])
-                if all(conditions):
-                    result_cookies.append(cookie)
-        return result_cookies
-
-    @staticmethod
-    def _cookies_to_dict(cookies):
-        return {cookie.name: cookie.value for cookie in cookies}
-
-    @staticmethod
-    def _header_cookie_from_cookies(cookies):
-        return '; '.join([f'{key}={value}'
-                          for key, value in Authenticator._cookies_to_dict(cookies).items()])
-
-    @property
-    def _default_headers(self):
-        return deepcopy({'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                         'Accept-Encoding': 'gzip, deflate, br',
-                         'Accept-Language': 'en-US,en;q=0.5',
-                         'Connection': 'keep-alive',
-                         'Upgrade-Insecure-Requests': '1',
-                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:73.0) '
-                                       'Gecko/20100101 Firefox/73.0'})
-
-    @property
-    def _standard_cookies(self):
-        return [FilterCookie('aws-account-data'),
-                FilterCookie('aws-ubid-main'),
-                FilterCookie('aws-userInfo'),
-                FilterCookie('awsc-actm'),
-                FilterCookie('awsm-vid')]
-
-    def _get_response(self, url, params=None, extra_cookies=None, headers=None):
-        extra_cookies = extra_cookies or []
-        headers = headers or {}
-        cookies_to_filter = self._standard_cookies + extra_cookies
-        headers.update(self._default_headers)
-        cookies = self._filter_cookies(self._session.cookies, cookies_to_filter)
-        headers['Cookie'] = self._header_cookie_from_cookies(cookies)
-        arguments = {'url': url,
-                     'headers': headers,
-                     'cookies': self._cookies_to_dict(cookies),
-                     'allow_redirects': False}
-        if params:
-            arguments.update({'params': params})
-        self.logger.debug('Getting url :%s with arguments : %s', url, arguments)
-        response = requests.get(**arguments)
-        if not response.ok:
-            try:
-                error_response = Bfs(response.text, features='html.parser')
-                error_title = error_response.title.string.strip()
-                err_msg = error_response.find('div', {'id': 'content'}).find('p').string
-            except AttributeError:
-                raise ValueError('Response received: %s' % response.text)
-            if all([response.status_code == 400, error_title == 'Credentials expired']):
-                raise ExpiredCredentials(response.status_code, err_msg)
-            raise ValueError('Response received: %s' % response.text)
-        self._debug_response(response, cookies)
-        self._session.cookies.update(response.cookies)
-        return response
-
-    @staticmethod
-    def _query_to_params(query):
-        query_lines = query.split('&') if query else []
-        return {line.split('=')[0]: line.split('=')[1] for line in query_lines}
-
-    def _debug_response(self, response, cookies):
-        params = self._query_to_params(urllib.parse.urlparse(response.request.url)[4])
-        self.logger.debug('URL : %s', response.request.url)
-        if params:
-            self.logger.debug('Params : ')
-            for key, value in params.items():
-                self.logger.debug('\t%s : %s', key, value)
-        self.logger.debug('Response status : %s', response.status_code)
-        self.logger.debug('\tRequest Headers :')
-        for name, value in dict(sorted(response.request.headers.items(), key=lambda x: x[0].lower())).items():
-            self.logger.debug('\t\t%s : %s', name, value)
-        self.logger.debug('\tRequest Cookies :')
-        for cookie in sorted(cookies, key=lambda x: x.name.lower()):
-            self.logger.debug('\t\t%s (domain:%s) : %s', cookie.name, cookie.domain, cookie.value)
-        self.logger.debug('\tResponse Headers :')
-        for name, value in dict(sorted(response.headers.items(), key=lambda x: x[0].lower())).items():
-            self.logger.debug('\t\t%s : %s', name, value)
-        self.logger.debug('\tResponse Cookies :')
-        for name, value in dict(sorted(response.cookies.items(), key=lambda x: x[0].lower())).items():
-            self.logger.debug('\t\t%s : %s', name, value)
-        self.logger.debug('Session Cookies :')
-        for cookie in sorted(self._session.cookies, key=lambda x: x.name.lower()):
-            self.logger.debug('\t%s (domain:%s%s) : %s', cookie.name, cookie.domain, cookie.path, cookie.value)
 
     def get_control_tower_authenticated_session(self):
         """Authenticates to control tower and returns an authenticated session.
@@ -540,26 +586,3 @@ class Authenticator(LoggerMixin):   # pylint: disable=too-many-instance-attribut
                                               csrf_token_data,
                                               extra_cookies,
                                               token_transform=lambda x: json.loads(x.replace('\\', '')).get('token'))
-
-    def _get_session_from_console(self,
-                                  console_page_response,
-                                  csrf_token_data,
-                                  extra_cookies=None,
-                                  token_transform=lambda x: x):
-        soup = Bfs(console_page_response.text, features='html.parser')
-        try:
-            csrf_token = soup.find(csrf_token_data.entity_type,
-                                   csrf_token_data.attributes).attrs.get(csrf_token_data.attribute_value)
-        except AttributeError:
-            raise ValueError('Response received: %s' % console_page_response.text)
-        if not csrf_token:
-            raise NoSigninTokenReceived('Unable to retrieve csrf token.')
-        session = requests.Session()
-        cookies_to_filter = self._standard_cookies + extra_cookies if extra_cookies else []
-        cookies = self._filter_cookies(self._session.cookies, cookies_to_filter)
-        session.headers.update(self._default_headers)
-        session.headers.update({'Cookie': self._header_cookie_from_cookies(cookies),
-                                csrf_token_data.headers_name: token_transform(csrf_token)})
-        for cookie in cookies:
-            session.cookies.set_cookie(cookie)
-        return session

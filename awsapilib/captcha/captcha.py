@@ -34,12 +34,11 @@ Main code for captcha.
 import base64
 import logging
 import os
+from abc import ABC, abstractmethod
 
 import requests
 
-from abc import ABC, abstractmethod
 from awsapilib.authentication import LoggerMixin
-
 from .captchaexceptions import CaptchaError, UnsupportedTerminal
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
@@ -59,13 +58,14 @@ LOGGER.addHandler(logging.NullHandler())
 
 
 class Solver(ABC, LoggerMixin):
+    """Interface for a Solver object."""
 
     @abstractmethod
-    def solve(self):
-        pass
+    def solve(self, url):
+        """Solves a url."""
 
 
-class Iterm(Solver):  # pylint: disable=too-few-public-methods
+class Iterm(Solver):
     """Interactive captcha solver for iTerm terminals."""
 
     def __init__(self):
@@ -89,14 +89,14 @@ class Iterm(Solver):  # pylint: disable=too-few-public-methods
         image = base64.b64encode(response.content).decode()
         print(f'\033]1337;File=inline=1;width=400px;height=140px:{image}\a\n')
         try:
-            guess = input('Guess: ')
+            guess = input('Captcha: ')
         except KeyboardInterrupt:
             raise CaptchaError(f'User interrupted.\nIf the captcha was not showing correctly please check that the url'
                                f'{url} indeed points to a valid captcha image..') from None
         return guess
 
 
-class Terminal(Solver):  # pylint: disable=too-few-public-methods
+class Terminal(Solver):
     """Interactive captcha solver for standard terminals."""
 
     def solve(self, url):
@@ -111,7 +111,7 @@ class Terminal(Solver):  # pylint: disable=too-few-public-methods
         """
         print(f'Please follow {url} and provide the solution.')
         try:
-            guess = input('Guess: ')
+            guess = input('Captcha: ')
         except KeyboardInterrupt:
-            raise CaptchaError(f'User interrupted.') from None
+            raise CaptchaError('User interrupted.') from None
         return guess
