@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# File: __init__.py
+# File: consoleexceptions.py
 #
 # Copyright 2021 Costas Tyfoxylos
 #
@@ -24,26 +24,39 @@
 #
 
 """
-billing package.
-
-Import all parts from billing here
+Custom exception code for console.
 
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
+
 """
-from .cloudformation import Cloudformation
-from .cloudformationexceptions import ServerError
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
-__date__ = '''30-03-2021'''
+__date__ = '''30-06-2021'''
 __copyright__ = '''Copyright 2021, Costas Tyfoxylos'''
+__credits__ = ["Costas Tyfoxylos"]
 __license__ = '''MIT'''
 __maintainer__ = '''Costas Tyfoxylos'''
 __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
-# This is to 'use' the module(s), so lint doesn't complain
 
-assert Cloudformation
-assert ServerError
+class NotSolverInstance(Exception):
+    """The object provided was not of Solver type."""
+
+
+class InvalidAuthentication(Exception):
+    """The authentication did not succeed."""
+
+
+class ServerError(Exception):
+    """Unknown server error occured."""
+
+
+class UnableToResolveAccount(Exception):
+    """Unable to resolve the account type."""
+
+
+class UnableToUpdateAccount(Exception):
+    """Unable to update the account info."""

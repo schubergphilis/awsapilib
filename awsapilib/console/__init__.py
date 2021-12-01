@@ -24,19 +24,24 @@
 #
 
 """
-billing package.
+console package.
 
-Import all parts from billing here
+Import all parts from console here
 
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
 """
-from .cloudformation import Cloudformation
-from .cloudformationexceptions import ServerError
+
+from .console import AccountManager
+from .consoleexceptions import (NotSolverInstance,
+                                InvalidAuthentication,
+                                ServerError,
+                                UnableToResolveAccount,
+                                UnableToUpdateAccount)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
-__date__ = '''30-03-2021'''
+__date__ = '''30-06-2021'''
 __copyright__ = '''Copyright 2021, Costas Tyfoxylos'''
 __license__ = '''MIT'''
 __maintainer__ = '''Costas Tyfoxylos'''
@@ -45,5 +50,10 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is to 'use' the module(s), so lint doesn't complain
 
-assert Cloudformation
+assert AccountManager
+
+assert NotSolverInstance
+assert InvalidAuthentication
 assert ServerError
+assert UnableToResolveAccount
+assert UnableToUpdateAccount

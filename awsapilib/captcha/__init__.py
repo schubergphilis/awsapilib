@@ -24,19 +24,19 @@
 #
 
 """
-billing package.
+captcha package.
 
-Import all parts from billing here
+Import all parts from captcha here
 
 .. _Google Python Style Guide:
    http://google.github.io/styleguide/pyguide.html
 """
-from .cloudformation import Cloudformation
-from .cloudformationexceptions import ServerError
+from .captcha import Solver, Iterm, Terminal
+from .captchaexceptions import CaptchaError, UnsupportedTerminal
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
-__date__ = '''30-03-2021'''
+__date__ = '''30-06-2021'''
 __copyright__ = '''Copyright 2021, Costas Tyfoxylos'''
 __license__ = '''MIT'''
 __maintainer__ = '''Costas Tyfoxylos'''
@@ -45,5 +45,8 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is to 'use' the module(s), so lint doesn't complain
 
-assert Cloudformation
-assert ServerError
+assert Solver
+assert Iterm
+assert Terminal
+assert CaptchaError
+assert UnsupportedTerminal
