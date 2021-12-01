@@ -103,7 +103,7 @@ class Domains:
         return f'{self.region}.console.{self.root}'
 
 
-@dataclass
+@dataclass  # pylint: disable=too-many-instance-attributes
 class Urls:
     """Dataclass holding the urls required for authenticating."""
 

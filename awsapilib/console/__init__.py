@@ -33,7 +33,11 @@ Import all parts from console here
 """
 
 from .console import AccountManager
-from .consoleexceptions import NotSolverInstance
+from .consoleexceptions import (NotSolverInstance,
+                                InvalidAuthentication,
+                                ServerError,
+                                UnableToResolveAccount,
+                                UnableToUpdateAccount)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -48,3 +52,6 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 assert AccountManager
 assert NotSolverInstance
+assert ServerError
+assert UnableToResolveAccount
+assert UnableToUpdateAccount

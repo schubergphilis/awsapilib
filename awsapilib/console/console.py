@@ -41,7 +41,11 @@ from requests import Session
 from awsapilib.authentication import LoggerMixin, Urls, Domains
 from awsapilib.authentication.authentication import BaseAuthenticator, FilterCookie, CsrfTokenData
 from awsapilib.captcha import Solver, Iterm, Terminal
-from .consoleexceptions import NotSolverInstance, InvalidAuthentication, ServerError, UnableToResolveAccount
+from .consoleexceptions import (NotSolverInstance,
+                                InvalidAuthentication,
+                                ServerError,
+                                UnableToResolveAccount,
+                                UnableToUpdateAccount)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -82,6 +86,7 @@ class Oidc:
 
 
 class RootAuthenticator(BaseAuthenticator):
+    """Interacts with the console to retrieve console and billing page sessions."""
 
     def __init__(self, session, region):
         super().__init__(region=region)
@@ -132,7 +137,18 @@ class RootAuthenticator(BaseAuthenticator):
             self.logger.error(f'Received broken response: {dashboard.text}')
         return dashboard.ok
 
-    def get_billing_root_session(self, redirect_url):
+    def get_billing_root_session(self, redirect_url, unfiltered_session=False):
+        """Retreives a billing session, filtered with specific cookies or not depending on the usage.
+
+        Args:
+            redirect_url (str): The redirect url provided to initiate the authentication flow after the captcha.
+            unfiltered_session (bool): Returns a full session if unfiltered, or a filtered session
+                with xsrf token if set to True. Defaults to False.
+
+        Returns:
+            session (Session): A valid session.
+
+        """
         if not self._get_console_root_session(redirect_url):
             raise InvalidAuthentication('Unable to get a valid authenticated session for root console.')
         service = 'billing'
@@ -155,18 +171,13 @@ class RootAuthenticator(BaseAuthenticator):
         dashboard = self._get_response(oauth_challenge.headers.get('Location'),
                                        extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
                                                       FilterCookie('JSESSIONID')])
+        if unfiltered_session:
+            return self._session
         csrf_token_data = CsrfTokenData(entity_type='input',
                                         attributes={'id': 'xsrfToken'},
                                         attribute_value='value',
                                         headers_name='x-awsbc-xsrf-token')
-        extra_cookies = [FilterCookie('aws-creds',),
-                         FilterCookie('aws-creds-code-verifier',),
-                         FilterCookie('aws-consoleInfo',),
-                         FilterCookie('aws-region-redirectHost', ),
-                         FilterCookie('aws-signin-account-info', ),
-                         FilterCookie('aws-userInfo', ),
-                         FilterCookie('aws-userInfo-signed', ),
-                         FilterCookie('regStatus', ),
+        extra_cookies = [FilterCookie('aws-creds', f'/{service}'),
                          FilterCookie('aws-signin-csrf', '/signin'),
                          FilterCookie('JSESSIONID', )]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
@@ -185,7 +196,8 @@ class AccountManager(LoggerMixin):
         self._reset_url = f'{Urls.sign_in}/resetpassword'
         self._update_url = f'{Urls.sign_in}/updateaccount'
 
-    def _get_captcha_info(self, response):
+    @staticmethod
+    def _get_captcha_info(response):
         try:
             properties = response.json().get('properties', {})
             url = properties.get('CaptchaURL')
@@ -315,15 +327,26 @@ class AccountManager(LoggerMixin):
                                         f'with status code: {root_response.status_code}')
         return root_response.json().get('properties').get('RedirectTo')
 
-    def _get_billing_session(self, email, password, region):
+    def _get_billing_session(self, email, password, region, unfiltered_session):
         session = Session()
         authenticator = RootAuthenticator(session, region=region)
         redirect_url = self._get_root_console_redirect(email, password, session)
-        return authenticator.get_billing_root_session(redirect_url)
+        return authenticator.get_billing_root_session(redirect_url, unfiltered_session=unfiltered_session)
 
     def terminate_account(self, email, password, region):
+        """Terminates the account of the corresponding info provided.
+
+        Args:
+            email: The email of the account to terminate.
+            password: The password of the account to terminate.
+            region: The region of the console.
+
+        Returns:
+            True on success, False otherwise.
+
+        """
         termination_url = f'{Urls.console}/billing/rest/v1.0/account'
-        session = self._get_billing_session(email, password, region)
+        session = self._get_billing_session(email, password, region, unfiltered_session=False)
         response = session.put(termination_url)
         if not response.ok:
             self.logger.error(f'Unsuccessful response received: {response.text} '
@@ -331,31 +354,60 @@ class AccountManager(LoggerMixin):
         return response.ok
 
     def update_account_name(self, new_account_name, email, password, region):
+        """Updates the email of an account to the new one provided.
+
+        Args:
+            new_account_name: The new account email.
+            email: The current email for authentication.
+            password: The password. of the account.
+            region: The region of the console.
+
+        Returns:
+            True on success.
+
+        Raises:
+            UnableToUpdateAccount: On Failure with the corresponding message from the backend service.
+
+        """
         payload = {'action': 'updateAccountName',
                    'newAccountName': new_account_name}
         return self._update_account(email, password, region, payload)
 
     def update_account_email(self, new_account_email, email, password, region):
+        """Updates the name of an account to the new one provided.
+
+        Args:
+            new_account_email: The new account name.
+            email: The email for authentication.
+            password: The password. of the account.
+            region: The region of the console.
+
+        Returns:
+            True on success.
+
+        Raises:
+            UnableToUpdateAccount: On Failure with the corresponding message from the backend service.
+
+        """
         payload = {'action': 'updateAccountEmail',
-                   'newAccountName': new_account_email}
+                   'newEmailAddress': new_account_email,
+                   'password': password}
         return self._update_account(email, password, region, payload)
 
     def _update_account(self, email, password, region, payload):
         update_url = f'{self._update_url}?redirect_uri={Urls.billing_home}#/account'
-        session = self._get_billing_session(email, password, region)
+        session = self._get_billing_session(email, password, region, unfiltered_session=True)
         response = session.get(update_url)
         if not response.ok:
             self.logger.error(f'Unsuccessful response received: {response.text} '
                               f'with status code: {response.status_code}')
-        print('i got here!!')
         headers = {'X-Requested-With': 'XMLHttpRequest'}
         payload_ = {'redirect_uri': f'{Urls.billing_home}#/account',
                     'csrf': response.cookies.get('aws-signin-csrf', path='/updateaccount')}
         payload_.update(payload)
-        print(payload_)
         response = session.post(self._update_url, headers=headers, data=payload_)
-        for c in session.cookies:
-            print(c.name, c.value, c.domain)
-        print(response.text)
-        print(response.ok)
-        return response.ok
+        if any([not response.ok,
+                response.json().get('state') == 'FAIL']):
+            raise UnableToUpdateAccount(f'Unable to update account info, response received was: {response.text} '
+                                        f'with status code: {response.status_code}')
+        return True

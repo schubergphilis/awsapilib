@@ -56,3 +56,7 @@ class ServerError(Exception):
 
 class UnableToResolveAccount(Exception):
     """Unable to resolve the account type."""
+
+
+class UnableToUpdateAccount(Exception):
+    """Unable to update the account info."""

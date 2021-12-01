@@ -43,7 +43,8 @@ from .controltowerexceptions import (UnsupportedTarget,
                                      EmailCheckFailed,
                                      EmailInUse,
                                      UnavailableRegion,
-                                     RoleCreationFailure)
+                                     RoleCreationFailure,
+                                     NoActiveArtifactRetrieved)
 from .controltower import ControlTower
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
@@ -71,3 +72,4 @@ assert EmailCheckFailed
 assert EmailInUse
 assert UnavailableRegion
 assert RoleCreationFailure
+assert NoActiveArtifactRetrieved
