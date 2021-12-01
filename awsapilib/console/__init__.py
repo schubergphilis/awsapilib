@@ -51,7 +51,9 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 # This is to 'use' the module(s), so lint doesn't complain
 
 assert AccountManager
+
 assert NotSolverInstance
+assert InvalidAuthentication
 assert ServerError
 assert UnableToResolveAccount
 assert UnableToUpdateAccount
