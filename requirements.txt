@@ -7,8 +7,8 @@
 #
 # Please use Pipfile to update the requirements.
 #
-boto3~=1.20.18
 requests~=2.26.0
+boto3~=1.20.18
 beautifulsoup4~=4.10.0
 opnieuw~=1.1.0
 boto3-type-annotations~=0.3.1
