@@ -14,4 +14,4 @@ opnieuw~=1.1.0
 boto3-type-annotations~=0.3.1
 cachetools~=4.2.4
 pyotp~=2.6.0
-2captcha-python~=1.1.0
+2captcha-python~=1.0.3
