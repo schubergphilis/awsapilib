@@ -42,7 +42,11 @@ from .consoleexceptions import (NotSolverInstance,
                                 NoMFAProvided,
                                 UnsupportedMFA,
                                 UnableToRequestResetPassword,
-                                UnableToResetPassword)
+                                UnableToResetPassword,
+                                UnableToCreateVirtualMFA,
+                                UnableToEnableVirtualMFA,
+                                UnableToDisableVirtualMFA,
+                                UnableToGetVirtualMFA)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -67,3 +71,7 @@ assert NoMFAProvided
 assert UnsupportedMFA
 assert UnableToRequestResetPassword
 assert UnableToResetPassword
+assert UnableToCreateVirtualMFA
+assert UnableToEnableVirtualMFA
+assert UnableToDisableVirtualMFA
+assert UnableToGetVirtualMFA

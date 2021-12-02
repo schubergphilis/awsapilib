@@ -80,3 +80,19 @@ class UnableToRequestResetPassword(Exception):
 
 class UnableToResetPassword(Exception):
     """The reset password request did not work."""
+
+
+class UnableToCreateVirtualMFA(Exception):
+    """The attempt to create a virtual mfa failed."""
+
+
+class UnableToEnableVirtualMFA(Exception):
+    """The attempt to create a virtual mfa failed."""
+
+
+class UnableToDisableVirtualMFA(Exception):
+    """The attempt to disable a virtual mfa failed."""
+
+
+class UnableToGetVirtualMFA(Exception):
+    """The attempt to list a virtual mfa failed."""

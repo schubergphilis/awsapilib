@@ -33,11 +33,12 @@ Main code for console.
 
 import logging
 import os
+import time
 import urllib
-
 from dataclasses import dataclass
-from requests import Session
+
 from pyotp import TOTP
+from requests import Session
 
 from awsapilib.authentication import LoggerMixin, Urls, Domains
 from awsapilib.authentication.authentication import BaseAuthenticator, FilterCookie, CsrfTokenData
@@ -51,7 +52,11 @@ from .consoleexceptions import (NotSolverInstance,
                                 NoMFAProvided,
                                 UnsupportedMFA,
                                 UnableToRequestResetPassword,
-                                UnableToResetPassword)
+                                UnableToResetPassword,
+                                UnableToCreateVirtualMFA,
+                                UnableToEnableVirtualMFA,
+                                UnableToDisableVirtualMFA,
+                                UnableToGetVirtualMFA)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -89,6 +94,37 @@ class Oidc:
     code_challenge: str
     code_challenge_method: str
     redirect_url: str
+
+
+@dataclass
+class MFA:
+    """Models the MFA device."""
+
+    _data: dict
+
+    @property
+    def _url(self):
+        return list(self._data)[0]
+
+    @property
+    def enabled_date(self):
+        """Timestamp of enabled day."""
+        return self._data.get(self._url).get('enabledDate', {}).get('time')
+
+    @property
+    def id(self):  # pylint: disable=invalid-name
+        """Id."""
+        return self._data.get(self._url).get('id')
+
+    @property
+    def serial_number(self):
+        """The serial number of the device."""
+        return self._data.get(self._url).get('serialNumber')
+
+    @property
+    def user_name(self):
+        """The user name set on the device."""
+        return self._data.get(self._url).get('userName')
 
 
 class RootAuthenticator(BaseAuthenticator):
@@ -240,6 +276,95 @@ class RootAuthenticator(BaseAuthenticator):
                          FilterCookie('aws-creds-code-verifier', f'/{service}'),
                          FilterCookie('aws-consoleInfo', )]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
+
+
+class MfaManager(LoggerMixin):
+    """Models interaction with the api for mfa management."""
+
+    def __init__(self, iam_session):
+        self.session = iam_session
+        self._api_url = f'{Urls.iam_api}/mfa'
+
+    def _create_virtual_mfa(self, name):
+        create_mfa_url = f'{self._api_url}/createVirtualMfa'
+        create_payload = {'virtualMFADeviceName': name, 'path': '/'}
+        self.logger.debug('Trying to create a virtual mfa')
+        response = self.session.post(create_mfa_url, json=create_payload)
+        if not response.ok:
+            raise UnableToCreateVirtualMFA(response.text)
+        serial_number = response.json().get('serialNumber')
+        seed = response.json().get('base32StringSeed')
+        self.logger.debug(f'Successfully created virtual mfa with serial number: "{serial_number}"')
+        return serial_number, seed
+
+    def create_virtual_mfa(self, name='root-account-mfa-device'):
+        """Creates a virtual MFA device with the provided name.
+
+        Args:
+            name: The name of the virtual MFA device, defaults to "root-account-mfa-device"
+
+        Returns:
+            seed (str): The secret seed of the virtual MFA device. This needs to be saved in a safe place!!
+
+        Raises:
+            UnableToCreateVirtualMFA, UnableToEnableVirtualMFA on respective failures.
+
+        """
+        serial_number, seed = self._create_virtual_mfa(name)
+        return self._enable_virtual_mfa(serial_number, seed)
+
+    def _enable_virtual_mfa(self, serial_number, seed):
+        enable_mfa_url = f'{self._api_url}/enableMfaDevice'
+        totp = TOTP(seed)
+        self.logger.debug('Calculating the first totp.')
+        authentication_code_1 = totp.now()
+        self.logger.debug('Waiting 30 seconds for the next totp.')
+        time.sleep(30)
+        authentication_code_2 = totp.now()
+        enable_payload = {'authenticationCode1': authentication_code_1,
+                          'authenticationCode2': authentication_code_2,
+                          'serialNumber': serial_number,
+                          'userName': ''}
+        self.logger.debug('Trying to enable the virtual mfa.')
+        response = self.session.post(enable_mfa_url, json=enable_payload)
+        if not response.ok:
+            raise UnableToEnableVirtualMFA(response.text)
+        self.logger.info(f'Successfully enabled mfa device with serial number "{serial_number}"')
+        return seed
+
+    def delete_virtual_mfa(self, serial_number):
+        """Deletes a virtual MFA with the provided serial number.
+
+        Args:
+            serial_number: The serial number of the virtual MFA device to delete.
+
+        Returns:
+            True on success
+
+        Raises:
+            UnableToDisableVirtualMFA on failure.
+
+        """
+        deactivate_mfa_url = f'{self._api_url}/deactivateMfaDevice'
+        deactivate_payload = {'userName': '', 'serialNumber': serial_number}
+        response = self.session.post(deactivate_mfa_url, json=deactivate_payload)
+        if not response.ok:
+            raise UnableToDisableVirtualMFA(response.text)
+        self.logger.info(f'Successfully deleted mfa device with serial number "{serial_number}"')
+        return True
+
+    def get_virtual_mfa_device(self):
+        """Retrieves the virtual MFA device if set.
+
+        Returns:
+            mfa_device (MFA): The set virtual MFA device if any else, None.
+
+        """
+        response = self.session.get(self._api_url)
+        if not response.ok:
+            raise UnableToGetVirtualMFA(response.text)
+        self.logger.debug(response.json())
+        return MFA(response.json().get('_embedded')) if response.json().get('_embedded') else None
 
 
 class AccountManager(LoggerMixin):
@@ -541,3 +666,19 @@ class AccountManager(LoggerMixin):
             raise UnableToUpdateAccount(response.text)
         self.logger.info('Account information updated successfully')
         return True
+
+    def get_mfa_manager(self, email, password, region, mfa_serial=None):
+        """Retrieves an MFA manager.
+
+        Args:
+            email: The email of the account
+            password: The password of the account
+            region: The region of the console
+            mfa_serial: The orgiginal seed of the MFA if MFA is set
+
+        Returns:
+            mfa_manager (MfaManager): The mfa manager object
+
+        """
+        session = self._get_iam_session(email, password, region, mfa_serial)
+        return MfaManager(session)
