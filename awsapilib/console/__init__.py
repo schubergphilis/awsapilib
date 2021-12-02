@@ -37,7 +37,16 @@ from .consoleexceptions import (NotSolverInstance,
                                 InvalidAuthentication,
                                 ServerError,
                                 UnableToResolveAccount,
-                                UnableToUpdateAccount)
+                                UnableToUpdateAccount,
+                                UnableToQueryMFA,
+                                NoMFAProvided,
+                                UnsupportedMFA,
+                                UnableToRequestResetPassword,
+                                UnableToResetPassword,
+                                UnableToCreateVirtualMFA,
+                                UnableToEnableVirtualMFA,
+                                UnableToDisableVirtualMFA,
+                                UnableToGetVirtualMFA)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -57,3 +66,12 @@ assert InvalidAuthentication
 assert ServerError
 assert UnableToResolveAccount
 assert UnableToUpdateAccount
+assert UnableToQueryMFA
+assert NoMFAProvided
+assert UnsupportedMFA
+assert UnableToRequestResetPassword
+assert UnableToResetPassword
+assert UnableToCreateVirtualMFA
+assert UnableToEnableVirtualMFA
+assert UnableToDisableVirtualMFA
+assert UnableToGetVirtualMFA

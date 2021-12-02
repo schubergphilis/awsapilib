@@ -37,6 +37,8 @@ import os
 from abc import ABC, abstractmethod
 
 import requests
+from twocaptcha import TwoCaptcha, ValidationException, TimeoutException
+from twocaptcha.api import ApiException, NetworkException
 
 from awsapilib.authentication import LoggerMixin
 from .captchaexceptions import CaptchaError, UnsupportedTerminal
@@ -115,3 +117,41 @@ class Terminal(Solver):
         except KeyboardInterrupt:
             raise CaptchaError('User interrupted.') from None
         return guess
+
+
+class Captcha2(Solver):
+    """2captcha solver."""
+
+    def __init__(self, api_key):
+        self.solver = TwoCaptcha(api_key)
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+    def solve(self, url):
+        """Presents a captcha image url and returns the captcha.
+
+        Args:
+            url (str): The url to provide that should have the captcha image.
+
+        Returns:
+            guess (str): The captcha.
+
+        """
+        captcha_parameters = {'numeric': 4,
+                              'minLength': 6,
+                              'maxLength': 6,
+                              'phrase': 0,
+                              'caseSensitive': 1,
+                              'calc': 0,
+                              'lang': 'en'}
+        try:
+            self.logger.debug(f'Trying to get captcha image from url : {url}')
+            response = requests.get(url)
+            image = base64.b64encode(response.content).decode("utf-8")
+            self.logger.debug('Waiting for the solved captcha from 2captcha service.')
+            result = self.solver.normal(image, **captcha_parameters)
+            self.logger.debug(f'Result for captcha was : {result}')
+        except (ValidationException, NetworkException, ApiException, TimeoutException) as msg:
+            raise CaptchaError(msg) from None
+        return result.get('code')

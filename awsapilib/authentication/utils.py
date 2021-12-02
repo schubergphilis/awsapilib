@@ -135,6 +135,15 @@ class HarParser:
         """
         return self._get_text_from_calls(self._get_service_calls('cloudformation'))
 
+    def get_communication_for_iam(self):
+        """Returns a text of the communication of a valid login to iam service.
+
+        Returns:
+            text (str): Returns a text of the communication of a valid login to iam service.
+
+        """
+        return self._get_text_from_calls(self._get_service_calls('iam'))
+
     def render_communication_for_console(self):
         """Prints a text of the communication of a valid login to console.
 
@@ -179,3 +188,12 @@ class HarParser:
 
         """
         print(self.get_communication_for_cloudformation())
+
+    def render_communication_for_iam(self):
+        """Prints a text of the communication of a valid login iam service.
+
+        Returns:
+            None
+
+        """
+        print(self.get_communication_for_iam())

@@ -60,3 +60,39 @@ class UnableToResolveAccount(Exception):
 
 class UnableToUpdateAccount(Exception):
     """Unable to update the account info."""
+
+
+class UnableToQueryMFA(Exception):
+    """Unable to query the account MFA info."""
+
+
+class NoMFAProvided(Exception):
+    """The account is MFA provided but no MFA serial was provided."""
+
+
+class UnsupportedMFA(Exception):
+    """The MFA enabled is not supported."""
+
+
+class UnableToRequestResetPassword(Exception):
+    """The request to reset password did not work."""
+
+
+class UnableToResetPassword(Exception):
+    """The reset password request did not work."""
+
+
+class UnableToCreateVirtualMFA(Exception):
+    """The attempt to create a virtual mfa failed."""
+
+
+class UnableToEnableVirtualMFA(Exception):
+    """The attempt to create a virtual mfa failed."""
+
+
+class UnableToDisableVirtualMFA(Exception):
+    """The attempt to disable a virtual mfa failed."""
+
+
+class UnableToGetVirtualMFA(Exception):
+    """The attempt to list a virtual mfa failed."""
