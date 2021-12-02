@@ -37,6 +37,7 @@ import urllib
 
 from dataclasses import dataclass
 from requests import Session
+from pyotp import TOTP
 
 from awsapilib.authentication import LoggerMixin, Urls, Domains
 from awsapilib.authentication.authentication import BaseAuthenticator, FilterCookie, CsrfTokenData
@@ -45,7 +46,12 @@ from .consoleexceptions import (NotSolverInstance,
                                 InvalidAuthentication,
                                 ServerError,
                                 UnableToResolveAccount,
-                                UnableToUpdateAccount)
+                                UnableToUpdateAccount,
+                                UnableToQueryMFA,
+                                NoMFAProvided,
+                                UnsupportedMFA,
+                                UnableToRequestResetPassword,
+                                UnableToResetPassword)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -182,15 +188,68 @@ class RootAuthenticator(BaseAuthenticator):
                          FilterCookie('JSESSIONID', )]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
+    def get_iam_root_session(self, redirect_url):
+        """Retrieves an iam console session, filtered with specific cookies or not depending on the usage.
+
+        Args:
+            redirect_url (str): The redirect url provided to initiate the authentication flow after the captcha.
+
+        Returns:
+            session (Session): A valid session.
+
+        """
+        if not self._get_console_root_session(redirect_url):
+            raise InvalidAuthentication('Unable to get a valid authenticated session for root console.')
+        service = 'iam'
+        url = f'{self.urls.iam_home}?region=us-east-2'
+        _ = self._session.get(url)
+        hash_args = self._get_response(url,
+                                       params={'state': 'hashArgs#'},
+                                       extra_cookies=[FilterCookie('cfn_sessid', ),
+                                                      FilterCookie('awsccc', ),
+                                                      FilterCookie('aws-csds-token', ),
+                                                      FilterCookie('aws-creds-code-verifier', f'/{service}')])
+        oauth = self._get_response(hash_args.headers.get('Location'),
+                                   extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
+                                                  FilterCookie('cfn_sessid', ),
+                                                  FilterCookie('aws-userInfo-signed', ),
+                                                  FilterCookie('aws-csds-token', ),
+                                                  FilterCookie('aws-creds', f'/{service}'),
+                                                  FilterCookie('JSESSIONID', ),
+                                                  FilterCookie('aws-userInfo-signed', )])
+        oauth_challenge = self._get_response(oauth.headers.get('Location'),
+                                             extra_cookies=[FilterCookie('JSESSIONID',),
+                                                            FilterCookie('awsccc', ),
+                                                            FilterCookie('aws-csds-token', ),
+                                                            FilterCookie('cfn_sessid', ),
+                                                            FilterCookie('aws-userInfo-signed', ),
+                                                            FilterCookie('aws-creds-code-verifier', f'/{service}')
+                                                            ])
+        dashboard = self._get_response(oauth_challenge.headers.get('Location'),
+                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
+                                                      FilterCookie('aws-creds-code-verifier', f'/{service}'),
+                                                      FilterCookie('cfn_sessid', ),
+                                                      FilterCookie('awsccc', ),
+                                                      FilterCookie('aws-userInfo-signed', ),
+                                                      FilterCookie('aws-consoleInfo', )])
+        csrf_token_data = CsrfTokenData(entity_type='meta',
+                                        attributes={'id': 'xsrf-token'},
+                                        attribute_value='data-token',
+                                        headers_name='X-CSRF-TOKEN')
+        extra_cookies = [FilterCookie('aws-creds', f'/{service}'),
+                         FilterCookie('aws-creds-code-verifier', f'/{service}'),
+                         FilterCookie('aws-consoleInfo', )]
+        return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
+
 
 class AccountManager(LoggerMixin):
     """Manages accounts password filecycles and can provide a root console session."""
 
     def __init__(self, solver=CONSOLE_SOLVER):
         self.session = Session()
-        if not issubclass(solver, Solver):
-            raise NotSolverInstance
         self._solver = solver()
+        if not isinstance(self._solver, Solver):
+            raise NotSolverInstance
         self._console_home_url = f'{Urls.console_home}'
         self._signin_url = f'{Urls.sign_in}/signin'
         self._reset_url = f'{Urls.sign_in}/resetpassword'
@@ -223,12 +282,24 @@ class AccountManager(LoggerMixin):
                            'captchaObfuscationToken': captcha.obfuscation_token})
         return parameters
 
+    @staticmethod
+    def _validate_response(response):
+        success = True
+        try:
+            if not all([response.ok, response.json().get('state', '') == 'SUCCESS']):
+                success = False
+        except AttributeError:
+            success = False
+        return success
+
     def _resolve_account_type(self, email):
         response = self._resolve_account_type_response(email, {'hashArgs': '#a'})
-        if not all([response.ok, response.json().get('state', '') == 'SUCCESS']):
-            self.logger.error(f'Error resolving account type, response: {response.text}')
-            return False
-        return True
+        success = self._validate_response(response)
+        if not success:
+            raise UnableToResolveAccount(f'Failed to resolve account type with response: {response.text} '
+                                         f'and status code {response.status_code}')
+        self.logger.debug(f'Resolved account type successfully with response :{response.text}')
+        return success
 
     def _resolve_account_type_response(self, email, extra_parameters=None, session=None):
         session_ = session if session else self.session
@@ -239,6 +310,7 @@ class AccountManager(LoggerMixin):
         _ = session_.get(self._console_home_url, params=parameters)
         parameters.update({'csrf': session_.cookies.get('aws-signin-csrf', path='/signin')})
         response = session_.post(self._signin_url, data=parameters)
+        self.logger.debug('Getting the resolve account type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
         return session_.post(self._signin_url, data=parameters)
 
@@ -251,23 +323,32 @@ class AccountManager(LoggerMixin):
         Returns:
             True on success, False otherwise.
 
+        Raises:
+            UnableToRequestResetPassword if unsuccessful
+
         """
-        if not self._resolve_account_type(email):
-            self.logger.error(f'Could not resolve account type for email: {email}')
-            return False
+        self.logger.debug(f'Trying to resolve account type for email :{email}')
+        try:
+            self._resolve_account_type(email)
+        except UnableToResolveAccount:
+            raise UnableToRequestResetPassword(f'Could not resolve account type for email: {email}')
         parameters = {'action': 'captcha',
                       'forgotpassword': True,
                       'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
+        self.logger.debug('Starting the forgot password workflow.')
         response = self.session.post(self._signin_url, data=parameters)
         parameters = {'action': 'getResetPasswordToken',
                       'email': email,
                       'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
+        self.logger.debug('Getting password reset captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
-        completed_response = self.session.post(self._signin_url, data=parameters)
-        if not completed_response.ok:
-            self.logger.error(f'Error requesting password reset, response: {completed_response.text}')
-            return False
-        return completed_response.json().get('state', '') == 'SUCCESS'
+        self.logger.debug('Requesting to reset the password.')
+        response = self.session.post(self._signin_url, data=parameters)
+        success = self._validate_response(response)
+        if not success:
+            raise UnableToRequestResetPassword(response.text)
+        self.logger.info('Requested password reset successfully')
+        return True
 
     def reset_password(self, reset_url, password):
         """Resets password of an aws account.
@@ -278,6 +359,9 @@ class AccountManager(LoggerMixin):
 
         Returns:
             True on success, False otherwise.
+
+        Raises:
+            UnableToResetPassword on failure
 
         """
         parsed_url = dict(urllib.parse.parse_qsl(reset_url))
@@ -290,13 +374,40 @@ class AccountManager(LoggerMixin):
                       'type': 'RootUser',
                       'csrf': self.session.cookies.get('aws-signin-csrf', path='/resetpassword')}
         response = self.session.post(self._reset_url, data=parameters)
-        if any([not response.ok,
-                not response.json().get('state', '') == 'SUCCESS']):
-            self.logger.error(f'Error resetting password, response: {response.text}')
-        return response.json().get('state', '') == 'SUCCESS'
+        success = self._validate_response(response)
+        if not success:
+            raise UnableToResetPassword(response.text)
+        self.logger.info('Password reset successful')
+        return True
 
-    def _get_root_console_redirect(self, email, password, session):
-        url = f'{Urls.console_home}'
+    def get_mfa_type(self, email):
+        """Gets the MFA type of the account.
+
+        Args:
+            email: The email of the account to check for MFA settings.
+
+        Returns:
+            The type of MFA set (only "SW" currently supported) None if no MFA is set.
+
+        """
+        url = f'{Urls.sign_in}/mfa'
+        payload = {'email': email,
+                   'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin'),
+                   'redirect_uri': f'{Urls.console_home}?'
+                                   f'fromtb=true&'
+                                   f'hashArgs=%23&'
+                                   f'isauthcode=true&'
+                                   f'state=hashArgsFromTB_us-east-1_4d16544228963f5b'
+                   }
+        response = self.session.post(url, data=payload)
+        if not response.ok:
+            raise UnableToQueryMFA(f'Unsuccessful response received: {response.text} '
+                                   f'with status code: {response.status_code}')
+        mfa_type = response.json().get('mfaType')
+        return None if mfa_type == 'NONE' else mfa_type
+
+    def _get_root_console_redirect(self, email, password, session, mfa_serial=None):
+        url = Urls.console_home
         parameters = {'hashArgs': '#a'}
         self.logger.debug(f'Trying to get url: {url} with parameters :{parameters}')
         response = session.get(url, params=parameters)
@@ -309,6 +420,13 @@ class AccountManager(LoggerMixin):
                 response.json().get('properties', {}).get('captchaStatusToken') is None]):
             raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
                                          f'with status code: {response.status_code}')
+        mfa_type = self.get_mfa_type(email)
+        if mfa_type:
+            if not mfa_serial:
+                raise NoMFAProvided(f'Account with email "{email}" is protected by mfa type "{mfa_type}" but no serial '
+                                    f'was provided.\n Please provide the initial serial that was used to setup MFA.')
+            if not mfa_type == 'SW':
+                raise UnsupportedMFA('Currently on SW mfa type is supported.')
         parameters = {'action': 'authenticateRoot',
                       'captcha_status_token': response.json().get('properties', {}).get('captchaStatusToken'),
                       'client_id': oidc.client_id,
@@ -319,22 +437,32 @@ class AccountManager(LoggerMixin):
                       'password': password,
                       'redirect_uri': oidc.redirect_url,
                       'csrf': session.cookies.get('aws-signin-csrf', path='/signin')}
-        root_response = session.post(self._signin_url, data=parameters)
-        if any([not root_response.ok,
-                root_response.json().get('state') == 'FAIL',
-                root_response.json().get('properties').get('RedirectTo') is None]):
-            raise InvalidAuthentication(f'Unable to authenticate, response received was: {root_response.text} '
-                                        f'with status code: {root_response.status_code}')
-        return root_response.json().get('properties').get('RedirectTo')
+        if mfa_type:
+            totp = TOTP(mfa_serial)
+            parameters.update({'mfaType': mfa_type,
+                               'mfa1': totp.now()})
+        response = session.post(self._signin_url, data=parameters)
+        success = self._validate_response(response)
+        if not all([success,
+                    response.json().get('properties').get('RedirectTo') is not None]):
+            raise InvalidAuthentication(f'Unable to authenticate, response received was: {response.text} '
+                                        f'with status code: {response.status_code}')
+        return response.json().get('properties').get('RedirectTo')
 
-    def _get_billing_session(self, email, password, region, unfiltered_session):
+    def _get_billing_session(self, email, password, region, unfiltered_session, mfa_serial=None):  # pylint: disable=too-many-arguments
         session = Session()
         authenticator = RootAuthenticator(session, region=region)
-        redirect_url = self._get_root_console_redirect(email, password, session)
+        redirect_url = self._get_root_console_redirect(email, password, session, mfa_serial=mfa_serial)
         return authenticator.get_billing_root_session(redirect_url, unfiltered_session=unfiltered_session)
 
-    def terminate_account(self, email, password, region):
-        """Terminates the account of the corresponding info provided.
+    def _get_iam_session(self, email, password, region, mfa_serial=None):
+        session = Session()
+        authenticator = RootAuthenticator(session, region=region)
+        redirect_url = self._get_root_console_redirect(email, password, session, mfa_serial=mfa_serial)
+        return authenticator.get_iam_root_session(redirect_url)
+
+    def terminate_account(self, email, password, region, mfa_serial=None):
+        """Terminates the account matching the info provided.
 
         Args:
             email: The email of the account to terminate.
@@ -346,14 +474,14 @@ class AccountManager(LoggerMixin):
 
         """
         termination_url = f'{Urls.console}/billing/rest/v1.0/account'
-        session = self._get_billing_session(email, password, region, unfiltered_session=False)
+        session = self._get_billing_session(email, password, region, unfiltered_session=False, mfa_serial=mfa_serial)
         response = session.put(termination_url)
         if not response.ok:
             self.logger.error(f'Unsuccessful response received: {response.text} '
                               f'with status code: {response.status_code}')
         return response.ok
 
-    def update_account_name(self, new_account_name, email, password, region):
+    def update_account_name(self, new_account_name, email, password, region, mfa_serial=None):  # pylint: disable=too-many-arguments
         """Updates the email of an account to the new one provided.
 
         Args:
@@ -361,6 +489,7 @@ class AccountManager(LoggerMixin):
             email: The current email for authentication.
             password: The password. of the account.
             region: The region of the console.
+            mfa_serial: The serial of the MFA configured, if any.
 
         Returns:
             True on success.
@@ -371,9 +500,9 @@ class AccountManager(LoggerMixin):
         """
         payload = {'action': 'updateAccountName',
                    'newAccountName': new_account_name}
-        return self._update_account(email, password, region, payload)
+        return self._update_account(email, password, region, payload, mfa_serial=mfa_serial)
 
-    def update_account_email(self, new_account_email, email, password, region):
+    def update_account_email(self, new_account_email, email, password, region, mfa_serial=None):  # pylint: disable=too-many-arguments
         """Updates the name of an account to the new one provided.
 
         Args:
@@ -381,6 +510,7 @@ class AccountManager(LoggerMixin):
             email: The email for authentication.
             password: The password. of the account.
             region: The region of the console.
+            mfa_serial: The serial of the MFA configured, if any.
 
         Returns:
             True on success.
@@ -392,11 +522,11 @@ class AccountManager(LoggerMixin):
         payload = {'action': 'updateAccountEmail',
                    'newEmailAddress': new_account_email,
                    'password': password}
-        return self._update_account(email, password, region, payload)
+        return self._update_account(email, password, region, payload, mfa_serial)
 
-    def _update_account(self, email, password, region, payload):
+    def _update_account(self, email, password, region, payload, mfa_serial=None):  # pylint: disable=too-many-arguments
         update_url = f'{self._update_url}?redirect_uri={Urls.billing_home}#/account'
-        session = self._get_billing_session(email, password, region, unfiltered_session=True)
+        session = self._get_billing_session(email, password, region, unfiltered_session=True, mfa_serial=mfa_serial)
         response = session.get(update_url)
         if not response.ok:
             self.logger.error(f'Unsuccessful response received: {response.text} '
@@ -406,8 +536,8 @@ class AccountManager(LoggerMixin):
                     'csrf': response.cookies.get('aws-signin-csrf', path='/updateaccount')}
         payload_.update(payload)
         response = session.post(self._update_url, headers=headers, data=payload_)
-        if any([not response.ok,
-                response.json().get('state') == 'FAIL']):
-            raise UnableToUpdateAccount(f'Unable to update account info, response received was: {response.text} '
-                                        f'with status code: {response.status_code}')
+        success = self._validate_response(response)
+        if not success:
+            raise UnableToUpdateAccount(response.text)
+        self.logger.info('Account information updated successfully')
         return True

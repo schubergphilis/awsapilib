@@ -60,3 +60,23 @@ class UnableToResolveAccount(Exception):
 
 class UnableToUpdateAccount(Exception):
     """Unable to update the account info."""
+
+
+class UnableToQueryMFA(Exception):
+    """Unable to query the account MFA info."""
+
+
+class NoMFAProvided(Exception):
+    """The account is MFA provided but no MFA serial was provided."""
+
+
+class UnsupportedMFA(Exception):
+    """The MFA enabled is not supported."""
+
+
+class UnableToRequestResetPassword(Exception):
+    """The request to reset password did not work."""
+
+
+class UnableToResetPassword(Exception):
+    """The reset password request did not work."""

@@ -115,6 +115,7 @@ class Urls:
     console: str = f'{scheme}console.{root_domain}'
     console_home: str = f'{scheme}console.{root_domain}/console/home'
     billing_home: str = f'{scheme}console.{root_domain}/billing/home'
+    iam_home: str = f'{scheme}console.{root_domain}/iam/home'
     federation: str = f'{sign_in}/federation'
 
     @property
