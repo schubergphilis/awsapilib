@@ -133,3 +133,9 @@ History
 -------------------
 
 * Added missing dependencies.
+
+
+1.0.0 (03-12-2021)
+------------------
+
+* Implemented account lifecycle and info update, MFA support and IAM billing console enablement.
