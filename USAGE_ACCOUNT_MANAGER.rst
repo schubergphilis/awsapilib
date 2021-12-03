@@ -40,8 +40,8 @@ To use Account Manager in a project:
     print(account_manager.iam.billing_console_access)
     >>> False
 
-    account_manager.iam.usage_report_access = True
-    print(am.iam.billing_console_access)
+    account_manager.iam.billing_console_access = True
+    print(account_manager.iam.billing_console_access)
     >>> True
 
     # Interface with MFA actions
