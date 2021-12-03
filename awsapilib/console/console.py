@@ -56,7 +56,8 @@ from .consoleexceptions import (NotSolverInstance,
                                 UnableToCreateVirtualMFA,
                                 UnableToEnableVirtualMFA,
                                 UnableToDisableVirtualMFA,
-                                UnableToGetVirtualMFA)
+                                UnableToGetVirtualMFA,
+                                VirtualMFADeviceExists)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -74,7 +75,8 @@ LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
 
-CONSOLE_SOLVER = Iterm if 'iterm' in os.environ.get('TERM_PROGRAM', '').lower() else Terminal  # pylint: disable=invalid-name
+term_program = os.environ.get('TERM_PROGRAM', '').lower()
+CONSOLE_SOLVER = Iterm if 'iterm' in term_program else Terminal  # pylint: disable=invalid-name
 
 
 @dataclass
@@ -278,6 +280,40 @@ class RootAuthenticator(BaseAuthenticator):
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
 
+class IamAccess(LoggerMixin):
+    """Models the iam access settings and implements the interaction with them."""
+
+    def __init__(self, billing_session):
+        self._session = billing_session
+        self._api_url = f'{Urls.billing_rest}/v1.0/account/iamaccess'
+
+    def _get_current_state(self):
+        response = self._session.get(self._api_url)
+        if not response.ok:
+            raise ServerError(f'Unsuccessful response received: {response.text} '
+                              f'with status code: {response.status_code}')
+        return response.json()
+
+    @property
+    def billing_console_access(self):
+        """Billing console access setting."""
+        current_state = self._get_current_state()
+        return current_state.get('billingConsoleAccessEnabled')
+
+    @billing_console_access.setter
+    def billing_console_access(self, value):
+        """Billing console access setting."""
+        self._update_setting(value, 'billingConsoleAccessEnabled')
+
+    def _update_setting(self, value, key):
+        current_state = self._get_current_state()
+        current_state[key] = bool(value)
+        response = self._session.put(self._api_url, data=current_state)
+        if not response.ok:
+            raise ServerError(f'Unsuccessful response received: {response.text} '
+                              f'with status code: {response.status_code}')
+
+
 class MfaManager(LoggerMixin):
     """Models interaction with the api for mfa management."""
 
@@ -291,27 +327,13 @@ class MfaManager(LoggerMixin):
         self.logger.debug('Trying to create a virtual mfa')
         response = self.session.post(create_mfa_url, json=create_payload)
         if not response.ok:
+            if response.status_code == 409:
+                raise VirtualMFADeviceExists(response.text)
             raise UnableToCreateVirtualMFA(response.text)
         serial_number = response.json().get('serialNumber')
         seed = response.json().get('base32StringSeed')
         self.logger.debug(f'Successfully created virtual mfa with serial number: "{serial_number}"')
         return serial_number, seed
-
-    def create_virtual_mfa(self, name='root-account-mfa-device'):
-        """Creates a virtual MFA device with the provided name.
-
-        Args:
-            name: The name of the virtual MFA device, defaults to "root-account-mfa-device"
-
-        Returns:
-            seed (str): The secret seed of the virtual MFA device. This needs to be saved in a safe place!!
-
-        Raises:
-            UnableToCreateVirtualMFA, UnableToEnableVirtualMFA on respective failures.
-
-        """
-        serial_number, seed = self._create_virtual_mfa(name)
-        return self._enable_virtual_mfa(serial_number, seed)
 
     def _enable_virtual_mfa(self, serial_number, seed):
         enable_mfa_url = f'{self._api_url}/enableMfaDevice'
@@ -332,7 +354,23 @@ class MfaManager(LoggerMixin):
         self.logger.info(f'Successfully enabled mfa device with serial number "{serial_number}"')
         return seed
 
-    def delete_virtual_mfa(self, serial_number):
+    def create_virtual_device(self, name='root-account-mfa-device'):
+        """Creates a virtual MFA device with the provided name.
+
+        Args:
+            name: The name of the virtual MFA device, defaults to "root-account-mfa-device"
+
+        Returns:
+            seed (str): The secret seed of the virtual MFA device. This needs to be saved in a safe place!!
+
+        Raises:
+            VirtualMFADeviceExists, UnableToCreateVirtualMFA, UnableToEnableVirtualMFA on respective failures.
+
+        """
+        serial_number, seed = self._create_virtual_mfa(name)
+        return self._enable_virtual_mfa(serial_number, seed)
+
+    def delete_virtual_device(self, serial_number):
         """Deletes a virtual MFA with the provided serial number.
 
         Args:
@@ -353,7 +391,7 @@ class MfaManager(LoggerMixin):
         self.logger.info(f'Successfully deleted mfa device with serial number "{serial_number}"')
         return True
 
-    def get_virtual_mfa_device(self):
+    def get_virtual_device(self):
         """Retrieves the virtual MFA device if set.
 
         Returns:
@@ -367,7 +405,7 @@ class MfaManager(LoggerMixin):
         return MFA(response.json().get('_embedded')) if response.json().get('_embedded') else None
 
 
-class AccountManager(LoggerMixin):
+class BaseConsoleInterface(LoggerMixin):
     """Manages accounts password filecycles and can provide a root console session."""
 
     def __init__(self, solver=CONSOLE_SOLVER):
@@ -438,72 +476,6 @@ class AccountManager(LoggerMixin):
         self.logger.debug('Getting the resolve account type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
         return session_.post(self._signin_url, data=parameters)
-
-    def request_password_reset(self, email):
-        """Requests a password reset for an account by it's email.
-
-        Args:
-            email: The email of the account to request the password reset.
-
-        Returns:
-            True on success, False otherwise.
-
-        Raises:
-            UnableToRequestResetPassword if unsuccessful
-
-        """
-        self.logger.debug(f'Trying to resolve account type for email :{email}')
-        try:
-            self._resolve_account_type(email)
-        except UnableToResolveAccount:
-            raise UnableToRequestResetPassword(f'Could not resolve account type for email: {email}')
-        parameters = {'action': 'captcha',
-                      'forgotpassword': True,
-                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
-        self.logger.debug('Starting the forgot password workflow.')
-        response = self.session.post(self._signin_url, data=parameters)
-        parameters = {'action': 'getResetPasswordToken',
-                      'email': email,
-                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
-        self.logger.debug('Getting password reset captcha.')
-        parameters = self._update_parameters_with_captcha(parameters, response)
-        self.logger.debug('Requesting to reset the password.')
-        response = self.session.post(self._signin_url, data=parameters)
-        success = self._validate_response(response)
-        if not success:
-            raise UnableToRequestResetPassword(response.text)
-        self.logger.info('Requested password reset successfully')
-        return True
-
-    def reset_password(self, reset_url, password):
-        """Resets password of an aws account.
-
-        Args:
-            reset_url: The reset url provided by aws thought the reset password workflow.
-            password: The new password to set to the account.
-
-        Returns:
-            True on success, False otherwise.
-
-        Raises:
-            UnableToResetPassword on failure
-
-        """
-        parsed_url = dict(urllib.parse.parse_qsl(reset_url))
-        _ = self.session.get(reset_url)
-        parameters = {'action': 'resetPasswordSubmitForm',
-                      'confirmpassword': password,
-                      'key': parsed_url.get('key'),
-                      'newpassword': password,
-                      'token': parsed_url.get('token'),
-                      'type': 'RootUser',
-                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/resetpassword')}
-        response = self.session.post(self._reset_url, data=parameters)
-        success = self._validate_response(response)
-        if not success:
-            raise UnableToResetPassword(response.text)
-        self.logger.info('Password reset successful')
-        return True
 
     def get_mfa_type(self, email):
         """Gets the MFA type of the account.
@@ -586,76 +558,157 @@ class AccountManager(LoggerMixin):
         redirect_url = self._get_root_console_redirect(email, password, session, mfa_serial=mfa_serial)
         return authenticator.get_iam_root_session(redirect_url)
 
-    def terminate_account(self, email, password, region, mfa_serial=None):
-        """Terminates the account matching the info provided.
+
+class PasswordManager(BaseConsoleInterface):
+    """Models interaction for account password reset."""
+
+    def request_password_reset(self, email):
+        """Requests a password reset for an account by it's email.
 
         Args:
-            email: The email of the account to terminate.
-            password: The password of the account to terminate.
-            region: The region of the console.
+            email: The email of the account to request the password reset.
+
+        Returns:
+            True on success, False otherwise.
+
+        Raises:
+            UnableToRequestResetPassword if unsuccessful
+
+        """
+        self.logger.debug(f'Trying to resolve account type for email :{email}')
+        try:
+            self._resolve_account_type(email)
+        except UnableToResolveAccount:
+            raise UnableToRequestResetPassword(f'Could not resolve account type for email: {email}')
+        parameters = {'action': 'captcha',
+                      'forgotpassword': True,
+                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
+        self.logger.debug('Starting the forgot password workflow.')
+        response = self.session.post(self._signin_url, data=parameters)
+        parameters = {'action': 'getResetPasswordToken',
+                      'email': email,
+                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
+        self.logger.debug('Getting password reset captcha.')
+        parameters = self._update_parameters_with_captcha(parameters, response)
+        self.logger.debug('Requesting to reset the password.')
+        response = self.session.post(self._signin_url, data=parameters)
+        success = self._validate_response(response)
+        if not success:
+            raise UnableToRequestResetPassword(response.text)
+        self.logger.info('Requested password reset successfully')
+        return True
+
+    def reset_password(self, reset_url, password):
+        """Resets password of an aws account.
+
+        Args:
+            reset_url: The reset url provided by aws thought the reset password workflow.
+            password: The new password to set to the account.
+
+        Returns:
+            True on success, False otherwise.
+
+        Raises:
+            UnableToResetPassword on failure
+
+        """
+        parsed_url = dict(urllib.parse.parse_qsl(reset_url))
+        _ = self.session.get(reset_url)
+        parameters = {'action': 'resetPasswordSubmitForm',
+                      'confirmpassword': password,
+                      'key': parsed_url.get('key'),
+                      'newpassword': password,
+                      'token': parsed_url.get('token'),
+                      'type': 'RootUser',
+                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/resetpassword')}
+        response = self.session.post(self._reset_url, data=parameters)
+        success = self._validate_response(response)
+        if not success:
+            raise UnableToResetPassword(response.text)
+        self.logger.info('Password reset successful')
+        return True
+
+
+class AccountManager(BaseConsoleInterface):
+    """Models basic communication with the server for account and password management."""
+
+    def __init__(self, email, password, region, mfa_serial=None, solver=CONSOLE_SOLVER):  # pylint: disable=too-many-arguments
+        BaseConsoleInterface.__init__(self, solver=solver)
+        self.email = email
+        self.password = password
+        self.region = region
+        self.mfa_serial = mfa_serial
+        self._mfa_manager = None
+        self._iam_access = None
+
+    def terminate_account(self):
+        """Terminates the account matching the info provided.
 
         Returns:
             True on success, False otherwise.
 
         """
-        termination_url = f'{Urls.console}/billing/rest/v1.0/account'
-        session = self._get_billing_session(email, password, region, unfiltered_session=False, mfa_serial=mfa_serial)
+        termination_url = f'{Urls.billing_rest}/v1.0/account'
+        session = self._get_billing_session(self.email,
+                                            self.password,
+                                            self.region,
+                                            unfiltered_session=False,
+                                            mfa_serial=self.mfa_serial)
         response = session.put(termination_url)
         if not response.ok:
             self.logger.error(f'Unsuccessful response received: {response.text} '
                               f'with status code: {response.status_code}')
         return response.ok
 
-    def update_account_name(self, new_account_name, email, password, region, mfa_serial=None):  # pylint: disable=too-many-arguments
+    def update_account_name(self, new_account_name):
         """Updates the email of an account to the new one provided.
 
         Args:
             new_account_name: The new account email.
-            email: The current email for authentication.
-            password: The password. of the account.
-            region: The region of the console.
-            mfa_serial: The serial of the MFA configured, if any.
 
         Returns:
             True on success.
 
         Raises:
-            UnableToUpdateAccount: On Failure with the corresponding message from the backend service.
+            ServerError, UnableToUpdateAccount: On Failure with the corresponding message from the backend service.
 
         """
         payload = {'action': 'updateAccountName',
                    'newAccountName': new_account_name}
-        return self._update_account(email, password, region, payload, mfa_serial=mfa_serial)
+        return self._update_account(payload)
 
-    def update_account_email(self, new_account_email, email, password, region, mfa_serial=None):  # pylint: disable=too-many-arguments
+    def update_account_email(self, new_account_email):
         """Updates the name of an account to the new one provided.
 
         Args:
             new_account_email: The new account name.
-            email: The email for authentication.
-            password: The password. of the account.
-            region: The region of the console.
-            mfa_serial: The serial of the MFA configured, if any.
 
         Returns:
             True on success.
 
         Raises:
-            UnableToUpdateAccount: On Failure with the corresponding message from the backend service.
+            ServerError, UnableToUpdateAccount: On Failure with the corresponding message from the backend service.
 
         """
         payload = {'action': 'updateAccountEmail',
                    'newEmailAddress': new_account_email,
-                   'password': password}
-        return self._update_account(email, password, region, payload, mfa_serial)
+                   'password': self.password}
+        success = self._update_account(payload)
+        if success:
+            self.email = new_account_email
+        return success
 
-    def _update_account(self, email, password, region, payload, mfa_serial=None):  # pylint: disable=too-many-arguments
+    def _update_account(self, payload):
         update_url = f'{self._update_url}?redirect_uri={Urls.billing_home}#/account'
-        session = self._get_billing_session(email, password, region, unfiltered_session=True, mfa_serial=mfa_serial)
+        session = self._get_billing_session(self.email,
+                                            self.password,
+                                            self.region,
+                                            unfiltered_session=True,
+                                            mfa_serial=self.mfa_serial)
         response = session.get(update_url)
         if not response.ok:
-            self.logger.error(f'Unsuccessful response received: {response.text} '
-                              f'with status code: {response.status_code}')
+            ServerError(f'Unsuccessful response received: {response.text} '
+                        f'with status code: {response.status_code}')
         headers = {'X-Requested-With': 'XMLHttpRequest'}
         payload_ = {'redirect_uri': f'{Urls.billing_home}#/account',
                     'csrf': response.cookies.get('aws-signin-csrf', path='/updateaccount')}
@@ -667,18 +720,27 @@ class AccountManager(LoggerMixin):
         self.logger.info('Account information updated successfully')
         return True
 
-    def get_mfa_manager(self, email, password, region, mfa_serial=None):
+    @property
+    def mfa(self):
         """Retrieves an MFA manager.
-
-        Args:
-            email: The email of the account
-            password: The password of the account
-            region: The region of the console
-            mfa_serial: The orgiginal seed of the MFA if MFA is set
 
         Returns:
             mfa_manager (MfaManager): The mfa manager object
 
         """
-        session = self._get_iam_session(email, password, region, mfa_serial)
-        return MfaManager(session)
+        if self._mfa_manager is None:
+            session = self._get_iam_session(self.email, self.password, self.region, self.mfa_serial)
+            self._mfa_manager = MfaManager(session)
+        return self._mfa_manager
+
+    @property
+    def iam(self):
+        """IAM."""
+        if self._iam_access is None:
+            session = self._get_billing_session(self.email,
+                                                self.password,
+                                                self.region,
+                                                unfiltered_session=False,
+                                                mfa_serial=self.mfa_serial)
+            self._iam_access = IamAccess(session)
+        return self._iam_access
