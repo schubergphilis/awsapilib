@@ -32,7 +32,7 @@ Import all parts from console here
    http://google.github.io/styleguide/pyguide.html
 """
 
-from .console import AccountManager
+from .console import AccountManager, PasswordManager
 from .consoleexceptions import (NotSolverInstance,
                                 InvalidAuthentication,
                                 ServerError,
@@ -46,7 +46,8 @@ from .consoleexceptions import (NotSolverInstance,
                                 UnableToCreateVirtualMFA,
                                 UnableToEnableVirtualMFA,
                                 UnableToDisableVirtualMFA,
-                                UnableToGetVirtualMFA)
+                                UnableToGetVirtualMFA,
+                                VirtualMFADeviceExists)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -60,6 +61,7 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 # This is to 'use' the module(s), so lint doesn't complain
 
 assert AccountManager
+assert PasswordManager
 
 assert NotSolverInstance
 assert InvalidAuthentication
@@ -75,3 +77,4 @@ assert UnableToCreateVirtualMFA
 assert UnableToEnableVirtualMFA
 assert UnableToDisableVirtualMFA
 assert UnableToGetVirtualMFA
+assert VirtualMFADeviceExists

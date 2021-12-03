@@ -96,3 +96,7 @@ class UnableToDisableVirtualMFA(Exception):
 
 class UnableToGetVirtualMFA(Exception):
     """The attempt to list a virtual mfa failed."""
+
+
+class VirtualMFADeviceExists(Exception):
+    """The device already exists."""

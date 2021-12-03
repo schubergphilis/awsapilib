@@ -37,7 +37,7 @@ from .controltower import ControlTower
 from .billing import Billing
 from .sso import Sso
 from .cloudformation import Cloudformation
-from .console import AccountManager
+from .console import AccountManager, PasswordManager
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -58,3 +58,4 @@ assert Billing
 assert Sso
 assert Cloudformation
 assert AccountManager
+assert PasswordManager
