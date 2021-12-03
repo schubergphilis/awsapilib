@@ -280,6 +280,40 @@ class RootAuthenticator(BaseAuthenticator):
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
 
+class IamAccess(LoggerMixin):
+    """Models the iam access settings and implements the interaction with them."""
+
+    def __init__(self, billing_session):
+        self._session = billing_session
+        self._api_url = f'{Urls.billing_rest}/v1.0/account/iamaccess'
+
+    def _get_current_state(self):
+        response = self._session.get(self._api_url)
+        if not response.ok:
+            raise ServerError(f'Unsuccessful response received: {response.text} '
+                              f'with status code: {response.status_code}')
+        return response.json()
+
+    @property
+    def billing_console_access(self):
+        """Billing console access setting."""
+        current_state = self._get_current_state()
+        return current_state.get('billingConsoleAccessEnabled')
+
+    @billing_console_access.setter
+    def billing_console_access(self, value):
+        """Billing console access setting."""
+        self._update_setting(value, 'billingConsoleAccessEnabled')
+
+    def _update_setting(self, value, key):
+        current_state = self._get_current_state()
+        current_state[key] = bool(value)
+        response = self._session.put(self._api_url, data=current_state)
+        if not response.ok:
+            raise ServerError(f'Unsuccessful response received: {response.text} '
+                              f'with status code: {response.status_code}')
+
+
 class MfaManager(LoggerMixin):
     """Models interaction with the api for mfa management."""
 
@@ -357,7 +391,7 @@ class MfaManager(LoggerMixin):
         self.logger.info(f'Successfully deleted mfa device with serial number "{serial_number}"')
         return True
 
-    def get_virtual_mfa_device(self):
+    def get_virtual_device(self):
         """Retrieves the virtual MFA device if set.
 
         Returns:
@@ -710,37 +744,3 @@ class AccountManager(BaseConsoleInterface):
                                                 mfa_serial=self.mfa_serial)
             self._iam_access = IamAccess(session)
         return self._iam_access
-
-
-class IamAccess(LoggerMixin):
-    """Models the iam access settings and implements the interaction with them."""
-
-    def __init__(self, billing_session):
-        self._session = billing_session
-        self._api_url = f'{Urls.billing_rest}/v1.0/account/iamaccess'
-
-    def _get_current_state(self):
-        response = self._session.get(self._api_url)
-        if not response.ok:
-            raise ServerError(f'Unsuccessful response received: {response.text} '
-                              f'with status code: {response.status_code}')
-        return response.json()
-
-    @property
-    def billing_console_access(self):
-        """Billing console access setting."""
-        current_state = self._get_current_state()
-        return current_state.get('billingConsoleAccessEnabled')
-
-    @billing_console_access.setter
-    def billing_console_access(self, value):
-        """Billing console access setting."""
-        self._update_setting(value, 'billingConsoleAccessEnabled')
-
-    def _update_setting(self, value, key):
-        current_state = self._get_current_state()
-        current_state[key] = bool(value)
-        response = self._session.put(self._api_url, data=current_state)
-        if not response.ok:
-            raise ServerError(f'Unsuccessful response received: {response.text} '
-                              f'with status code: {response.status_code}')
