@@ -450,7 +450,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         else:
             parent_ou = self.get_organizations_ou_by_name(parent_ou_name)
             parent_ou_id = parent_ou.id
-            self.logger.debug('Trying to create OU :"%s" under %s ou', name, parent_ou.name)
+            self.logger.debug('Trying to create OU :"%s" under "%s" ou', name, parent_ou.name)
         try:
             response = self.organizations.create_organizational_unit(ParentId=parent_ou_id, Name=name)
         except botocore.exceptions.ClientError as err:
