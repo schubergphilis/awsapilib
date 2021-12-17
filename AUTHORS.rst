@@ -11,4 +11,5 @@ Contributors
 ------------
 
 * Sjoerd Tromp <valkjes@gmail.com>
+* Sayantan Khanra <skhanra@schubergphilis.com>
 
