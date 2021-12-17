@@ -433,19 +433,22 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return self._register_org_ou_in_control_tower(org_ou)
 
     @validate_availability
-    def create_organizational_unit(self, name):
+    def create_organizational_unit(self, name: str, parent_ou_id: str = '') -> bool:
         """Creates a Control Tower managed organizational unit.
 
         Args:
             name (str): The name of the OU to create.
+            parent_ou_id(str): Id of the parent OU
 
         Returns:
             result (bool): True if successful, False otherwise.
 
         """
-        self.logger.debug('Trying to create OU :"%s" under root ou', name)
+        if not parent_ou_id:
+            parent_ou_id = self.root_ou.id
+            self.logger.debug('Trying to create OU :"%s" under root ou', name)
         try:
-            response = self.organizations.create_organizational_unit(ParentId=self.root_ou.id, Name=name)
+            response = self.organizations.create_organizational_unit(ParentId=parent_ou_id, Name=name)
         except botocore.exceptions.ClientError as err:
             status = err.response["ResponseMetadata"]["HTTPStatusCode"]
             error_code = err.response["Error"]["Code"]
@@ -486,7 +489,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return bool(response.json().get('ManagedOrganizationalUnitList'))
 
     @validate_availability
-    def delete_organizational_unit(self, name):
+    def delete_organizational_unit(self, name: str) -> bool:
         """Deletes a Control Tower managed organizational unit.
 
         Args:
