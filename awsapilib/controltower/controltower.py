@@ -724,19 +724,21 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     @retry(retry_on_exceptions=OUCreating, max_calls_total=7, retry_window_after_first_call_in_seconds=60)
     @validate_availability
     def create_account(self,  # pylint: disable=too-many-arguments
-                       account_name,
-                       account_email,
-                       organizational_unit,
-                       product_name=None,
-                       sso_first_name=None,
-                       sso_last_name=None,
-                       sso_user_email=None):
+                       account_name: str,
+                       account_email: str,
+                       organizational_unit: str,
+                       parent_organizational_unit: str = '',
+                       product_name: str = None,
+                       sso_first_name: str = None,
+                       sso_last_name: str = None,
+                       sso_user_email: str = None) -> bool:
         """Creates a Control Tower managed account.
 
         Args:
             account_name (str): The name of the account.
             account_email (str): The email of the account.
             organizational_unit (str): The organizational unit that the account should be under.
+            parent_organizational_unit(str): The Parent organizational unit under which the new ou will be created
             product_name (str): The product name, if nothing is provided it uses the account name.
             sso_first_name (str): The first name of the SSO user, defaults to "Control"
             sso_last_name (str): The last name of the SSO user, defaults to "Tower"
@@ -751,11 +753,15 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         sso_first_name = sso_first_name or 'Control'
         sso_last_name = sso_last_name or 'Tower'
         if not self.get_organizational_unit_by_name(organizational_unit):
-            if not self.create_organizational_unit(organizational_unit):
+            if not self.create_organizational_unit(name=organizational_unit,
+                                                   parent_ou_name=parent_organizational_unit):
                 self.logger.error('Unable to create the organizational unit!')
                 return False
         while self.busy:
             time.sleep(1)
+        if parent_organizational_unit:
+            ou_details = self.get_organizational_unit_by_name(organizational_unit)
+            organizational_unit = f'{organizational_unit} ({ou_details.id})'
         arguments = {'ProductId': self._account_factory.product_id,
                      'ProvisionedProductName': product_name,
                      'ProvisioningArtifactId': self._active_artifact.get('Id'),
