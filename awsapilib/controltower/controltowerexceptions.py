@@ -96,3 +96,7 @@ class RoleCreationFailure(Exception):
 
 class NoActiveArtifactRetrieved(Exception):
     """Could not retrieve an active artifact."""
+
+
+class NonExistentOU(Exception):
+    """The OU name provided does not exist in Control Tower."""

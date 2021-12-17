@@ -61,7 +61,8 @@ from .controltowerexceptions import (UnsupportedTarget,
                                      EmailInUse,
                                      UnavailableRegion,
                                      RoleCreationFailure,
-                                     NoActiveArtifactRetrieved)
+                                     NoActiveArtifactRetrieved,
+                                     NonExistentOU)
 from .resources import (LOGGER,
                         LOGGER_BASENAME,
                         ServiceControlPolicy,
@@ -449,6 +450,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             self.logger.debug('Trying to create OU :"%s" under root ou', name)
         else:
             parent_ou = self.get_organizations_ou_by_name(parent_ou_name)
+            if not parent_ou:
+                raise NonExistentOU(f'OU with name {parent_ou_name} does not exist in Control Tower')
             parent_ou_id = parent_ou.id
             self.logger.debug('Trying to create OU :"%s" under "%s" ou', name, parent_ou.name)
         try:
