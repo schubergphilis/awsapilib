@@ -139,3 +139,9 @@ History
 ------------------
 
 * Implemented account lifecycle and info update, MFA support and IAM billing console enablement.
+
+
+1.1.0 (18-12-2021)
+------------------
+
+* Added support for nested OUs
