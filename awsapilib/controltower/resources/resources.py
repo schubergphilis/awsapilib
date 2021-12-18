@@ -524,7 +524,7 @@ class OrganizationsOU:
         return self._data.get('Arn')
 
 
-class ControlTowerOU:
+class ControlTowerOU(LoggerMixin):
     """Model the data of a Control Tower managed OU."""
 
     def __init__(self, control_tower, data):
@@ -574,3 +574,20 @@ class ControlTowerOU:
 
         """
         return self.control_tower.delete_organizational_unit(self.name)
+
+    @property
+    def child_ous(self):
+        """The list child OUs for this ou.
+
+        Returns:
+            response (list): List of Child OUs
+
+        """
+        payload = self.control_tower._get_api_payload(content_string={'OrganizationalUnitId': self.id},  # pylint: disable=protected-access
+                                                      target='describeManagedOrganizationalUnit')
+        response = self.control_tower.session.post(self.control_tower.url, json=payload)
+        if not response.ok:
+            self.logger.error('Failed to get Child OUs')
+            return []
+        return [ControlTowerOU(self.control_tower, _data) for _data in
+                response.json().get('ChildrenOrganizationalUnits')]
