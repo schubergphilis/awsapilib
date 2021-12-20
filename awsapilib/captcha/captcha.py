@@ -41,7 +41,7 @@ from twocaptcha import TwoCaptcha, ValidationException, TimeoutException
 from twocaptcha.api import ApiException, NetworkException
 
 from awsapilib.authentication import LoggerMixin
-from .captchaexceptions import CaptchaError, UnsupportedTerminal, WrongOrEmptyApiToken
+from .captchaexceptions import CaptchaError, UnsupportedTerminal, InvalidOrNoBalanceApiToken
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -134,9 +134,9 @@ class Captcha2(Solver):
         try:
             balance = solver.balance()
             if not balance:
-                raise WrongOrEmptyApiToken('No balance left on the token.')
+                raise InvalidOrNoBalanceApiToken('No balance left on the token.')
         except ApiException as msg:
-            raise WrongOrEmptyApiToken(msg) from None
+            raise InvalidOrNoBalanceApiToken(msg) from None
         return solver
 
     def solve(self, url):

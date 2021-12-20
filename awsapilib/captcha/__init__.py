@@ -32,7 +32,7 @@ Import all parts from captcha here
    http://google.github.io/styleguide/pyguide.html
 """
 from .captcha import Solver, Iterm, Terminal, Captcha2
-from .captchaexceptions import CaptchaError, UnsupportedTerminal, WrongOrEmptyApiToken
+from .captchaexceptions import CaptchaError, UnsupportedTerminal, InvalidOrNoBalanceApiToken
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -51,4 +51,4 @@ assert Terminal
 assert CaptchaError
 assert UnsupportedTerminal
 assert Captcha2
-assert WrongOrEmptyApiToken
+assert InvalidOrNoBalanceApiToken
