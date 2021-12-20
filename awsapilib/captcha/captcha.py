@@ -41,7 +41,7 @@ from twocaptcha import TwoCaptcha, ValidationException, TimeoutException
 from twocaptcha.api import ApiException, NetworkException
 
 from awsapilib.authentication import LoggerMixin
-from .captchaexceptions import CaptchaError, UnsupportedTerminal
+from .captchaexceptions import CaptchaError, UnsupportedTerminal, WrongOrEmptyApiToken
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -61,6 +61,9 @@ LOGGER.addHandler(logging.NullHandler())
 
 class Solver(ABC, LoggerMixin):
     """Interface for a Solver object."""
+
+    def __call__(self, *args, **kwargs):
+        return self
 
     @abstractmethod
     def solve(self, url):
@@ -122,11 +125,19 @@ class Terminal(Solver):
 class Captcha2(Solver):
     """2captcha solver."""
 
-    def __init__(self, api_key):
-        self.solver = TwoCaptcha(api_key)
+    def __init__(self, api_token):
+        self.solver = self._get_client(api_token)
 
-    def __call__(self, *args, **kwargs):
-        return self
+    @staticmethod
+    def _get_client(api_token):
+        solver = TwoCaptcha(api_token)
+        try:
+            balance = solver.balance()
+            if not balance:
+                raise WrongOrEmptyApiToken('No balance left on the token.')
+        except ApiException as msg:
+            raise WrongOrEmptyApiToken(msg) from None
+        return solver
 
     def solve(self, url):
         """Presents a captcha image url and returns the captcha.
