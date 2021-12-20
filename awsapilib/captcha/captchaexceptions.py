@@ -48,3 +48,7 @@ class CaptchaError(Exception):
 
 class UnsupportedTerminal(Exception):
     """The terminal executing under is not supported."""
+
+
+class WrongOrEmptyApiToken(Exception):
+    """The api token provided either does not provide access or there is no money on the token to be used."""
