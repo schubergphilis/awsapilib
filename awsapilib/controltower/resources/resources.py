@@ -523,6 +523,21 @@ class OrganizationsOU:
         """The arn of the OU."""
         return self._data.get('Arn')
 
+    @property
+    def parent_ou_id(self):
+        """The id of the parent."""
+        return self._data.get('ParentId')
+
+    @property
+    def parent_ou_arn(self):
+        """The arn of the parent."""
+        return self._data.get('ParentArn')
+
+    @property
+    def parent_ou_name(self):
+        """The name of the parent."""
+        return self._data.get('ParentName')
+
 
 class ControlTowerOU(LoggerMixin):
     """Model the data of a Control Tower managed OU."""

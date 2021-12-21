@@ -100,3 +100,7 @@ class NoActiveArtifactRetrieved(Exception):
 
 class NonExistentOU(Exception):
     """The OU name provided does not exist in Control Tower."""
+
+
+class InvalidParentHierarchy(Exception):
+    """The parent hierarchy provided is not valid."""

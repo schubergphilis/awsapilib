@@ -34,7 +34,8 @@ Import all parts from configuration here
 
 from .configuration import (LOGGER,
                             LOGGER_BASENAME,
-                            CREATING_ACCOUNT_ERROR_MESSAGE)
+                            CREATING_ACCOUNT_ERROR_MESSAGE,
+                            OU_HIERARCHY_DEPTH_SUPPORTED)
 
 from .resources import (CoreAccount,
                         ControlTowerAccount,
@@ -66,3 +67,4 @@ assert AccountFactory
 assert ServiceControlPolicy
 assert GuardRail
 assert OrganizationsOU
+assert OU_HIERARCHY_DEPTH_SUPPORTED

@@ -49,3 +49,4 @@ LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
 CREATING_ACCOUNT_ERROR_MESSAGE = 'Package is in state CREATING, but must be in state AVAILABLE'
+OU_HIERARCHY_DEPTH_SUPPORTED = 5
