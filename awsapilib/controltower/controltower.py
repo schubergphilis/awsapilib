@@ -509,7 +509,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             return False
         # Making sure that eventual consistency is not a problem here,
         # we wait for control tower to be aware of initialising of the process and then we block on it while it runs.
-        time.sleep(2)
+        time.sleep(3)
         while self.busy:
             self.logger.debug(f'Waiting the registration of "{org_ou.name}" OU.')
             time.sleep(1)
