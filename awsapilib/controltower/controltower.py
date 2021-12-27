@@ -428,7 +428,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if self.get_organizational_unit_by_name(name, parent_hierarchy) and not force:
             self.logger.info(f'OU "{name}" is already registered with Control Tower.')
             return True
-        org_ou = self.get_organizations_ou_by_name(name, parent_hierarchy)
+        try:
+            org_ou = self.get_organizations_ou_by_name(name, parent_hierarchy)
+        except NonExistentOU:
+            org_ou = None
         if not org_ou:
             self.logger.error(f'OU "{name}" does not exist under organizations.')
             return False
