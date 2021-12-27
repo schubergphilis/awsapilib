@@ -606,3 +606,35 @@ class ControlTowerOU(LoggerMixin):
             return []
         return [ControlTowerOU(self.control_tower, _data) for _data in
                 response.json().get('ChildrenOrganizationalUnits')]
+
+
+class ResultOU:
+    """Model the data of an child OU described by the api."""
+
+    def __init__(self, data):
+        self._data = data
+
+    @property
+    def id(self):  # pylint: disable=invalid-name
+        """The id of the OU."""
+        return self._data.get('OrganizationalUnitId')
+
+    @property
+    def name(self):
+        """The name of the OU."""
+        return self._data.get('OrganizationalUnitName')
+
+    @property
+    def status(self):
+        """The status of the OU."""
+        return self._data.get('OrganizationalUnitStatus')
+
+    @property
+    def parent_ou_id(self):
+        """The id of the parent."""
+        return self._data.get('ParentOrganizationalUnitId')
+
+    @property
+    def create_date(self):
+        """The timestamp of the creation."""
+        return self._data.get('CreateDate')

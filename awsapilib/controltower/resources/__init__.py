@@ -43,7 +43,8 @@ from .resources import (CoreAccount,
                         ControlTowerOU,
                         AccountFactory,
                         OrganizationsOU,
-                        GuardRail)
+                        GuardRail,
+                        ResultOU)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -68,3 +69,4 @@ assert ServiceControlPolicy
 assert GuardRail
 assert OrganizationsOU
 assert OU_HIERARCHY_DEPTH_SUPPORTED
+assert ResultOU

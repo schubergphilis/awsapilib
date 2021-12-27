@@ -71,6 +71,7 @@ from .resources import (LOGGER,
                         ControlTowerOU,
                         AccountFactory,
                         OrganizationsOU,
+                        ResultOU,
                         GuardRail,
                         CREATING_ACCOUNT_ERROR_MESSAGE,
                         OU_HIERARCHY_DEPTH_SUPPORTED)
@@ -496,6 +497,19 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                          f'need to register to Control Tower, this takes some time.')
         return self._register_org_ou_in_control_tower(org_ou)
 
+    def _describe_organizational_unit(self, organizational_unit_id):
+        """The details of an organizational unit."""
+        payload = self._get_api_payload(content_string={'OrganizationalUnitId': organizational_unit_id},
+                                        target='describeManagedOrganizationalUnit')
+        self.logger.debug(f'Trying to get details of OU with id "{organizational_unit_id}"')
+        response = self.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error('Failed to get the description of OU with response status '
+                              '"%s" and response text "%s"',
+                              response.status_code, response.text)
+            raise ServiceCallFailed(payload)
+        return [ResultOU(data) for data in response.json().get('ChildrenOrganizationalUnits')]
+
     def _register_org_ou_in_control_tower(self, org_ou):
         self.logger.debug('Registering or re-registering OU under Control Tower')
         payload = self._get_api_payload(content_string={'OrganizationalUnitId': org_ou.id,
@@ -509,10 +523,15 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             return False
         # Making sure that eventual consistency is not a problem here,
         # we wait for control tower to be aware of initialising of the process and then we block on it while it runs.
-        time.sleep(3)
-        while self.busy:
-            self.logger.debug(f'Waiting the registration of "{org_ou.name}" OU.')
-            time.sleep(1)
+        result = self._describe_organizational_unit(org_ou.parent_ou_id)
+        while not any([all([ou.name == org_ou.name,
+                            ou.status == 'COMPLETED']) for ou in result]):
+            time.sleep(2)
+            result = self._describe_organizational_unit(org_ou.parent_ou_id)
+            match = next((ou for ou in result if ou.name == org_ou.name), None)
+            if match and match.status not in ['IN_PROGRESS', 'COMPLETED']:
+                self.logger.error(f'Failed to register OU "{org_ou.name}" with status "{match.status}"')
+                return False
         self.logger.info(f'Successfully registered or re-registered OU "{org_ou.name}" under Control Tower')
         return True
 
@@ -866,6 +885,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         try:
             ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
         except NonExistentOU:
+            message = f'There does not seem to be an OU {organizational_unit} under hierarchy {parent_hierarchy}'
+            if not force_parent_hierarchy_creation:
+                raise NonExistentOU(message)
+            self.logger.debug(message)
             if not self.create_organizational_unit(name=organizational_unit,
                                                    parent_hierarchy=parent_hierarchy,
                                                    force_create=force_parent_hierarchy_creation):
