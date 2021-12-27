@@ -583,8 +583,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _validate_hierarchy(hierarchy):
-        if not isinstance(hierarchy, list):
+        if not isinstance(hierarchy, (list, tuple)):
             raise InvalidParentHierarchy(f'Only "list" is a valid argument, received "{type(hierarchy)}"')
+        if isinstance(hierarchy, tuple):
+            hierarchy = list(hierarchy)
         if not hierarchy[0] == 'Root':
             hierarchy.insert(0, 'Root')
         if len(hierarchy) > OU_HIERARCHY_DEPTH_SUPPORTED:
