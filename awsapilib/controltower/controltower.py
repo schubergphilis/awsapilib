@@ -881,6 +881,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         Returns:
             result (bool): True on success, False otherwise.
 
+        Raises:
+            NonExistentOU: If the parent hierarchy provided does not exist and force is not provided as a flag.
+            InvalidParentHierarchy: If the parent hierarchy provided is invalid and force is not provided as a flag.
+
         """
         product_name = product_name or account_name
         sso_user_email = sso_user_email or account_email
