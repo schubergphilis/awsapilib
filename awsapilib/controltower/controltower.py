@@ -589,9 +589,11 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             hierarchy = list(hierarchy)
         if not hierarchy[0] == 'Root':
             hierarchy.insert(0, 'Root')
+        hierarchy = [ou for ou in hierarchy if ou]
         if len(hierarchy) > OU_HIERARCHY_DEPTH_SUPPORTED:
-            raise InvalidParentHierarchy(f'Only {OU_HIERARCHY_DEPTH_SUPPORTED} levels are supported under Root OU.')
-        return [ou for ou in hierarchy if ou]
+            raise InvalidParentHierarchy(f'Only {OU_HIERARCHY_DEPTH_SUPPORTED} levels are supported under Root OU, '
+                                         f'received {hierarchy} that is {len(hierarchy)}')
+        return hierarchy
 
     @staticmethod
     def _get_ou_by_attribute_pairs(ou_container, attribute_pairs):
