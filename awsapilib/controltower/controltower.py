@@ -884,6 +884,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         Raises:
             NonExistentOU: If the parent hierarchy provided does not exist and force is not provided as a flag.
             InvalidParentHierarchy: If the parent hierarchy provided is invalid and force is not provided as a flag.
+            EmailInUse: If email provided is already used in AWS.
 
         """
         if self.is_email_used(account_email):
