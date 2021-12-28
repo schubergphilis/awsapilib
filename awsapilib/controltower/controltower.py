@@ -886,6 +886,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             InvalidParentHierarchy: If the parent hierarchy provided is invalid and force is not provided as a flag.
 
         """
+        if self.is_email_used(account_email):
+            raise EmailInUse(account_email)
         product_name = product_name or account_name
         sso_user_email = sso_user_email or account_email
         sso_first_name = sso_first_name or 'Control'
