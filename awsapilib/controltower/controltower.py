@@ -609,7 +609,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                           'parent_ou_id': parent_ou_id}
             organizational_unit = ControlTower._get_ou_by_attribute_pairs(organizational_units, attributes)
             if all([not organizational_unit, not force_create]):
-                raise NonExistentOU(f'No OU with name "{name}" and parent id "{parent_ou_id}"')
+                raise NonExistentOU(f'No OU with name "{name}" and parent OU name "{parent_ou_name}" '
+                                    f'and parent id "{parent_ou_id}"')
             if not organizational_unit:
                 self.logger.info(f'Attempting to create missing "{name}" OU.')
                 if self.create_organizational_unit(name, parent_hierarchy=working_path, force_create=force_create):
