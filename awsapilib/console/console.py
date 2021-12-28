@@ -129,6 +129,14 @@ class MFA:
         return self._data.get(self._url).get('userName')
 
 
+@dataclass
+class VirtualMFADevice:
+    """Models the active MFA device."""
+
+    seed: str
+    serial: str
+
+
 class RootAuthenticator(BaseAuthenticator):
     """Interacts with the console to retrieve console and billing page sessions."""
 
@@ -352,7 +360,7 @@ class MfaManager(LoggerMixin):
         if not response.ok:
             raise UnableToEnableVirtualMFA(response.text)
         self.logger.info(f'Successfully enabled mfa device with serial number "{serial_number}"')
-        return seed
+        return VirtualMFADevice(seed, serial_number)
 
     def create_virtual_device(self, name='root-account-mfa-device'):
         """Creates a virtual MFA device with the provided name.
