@@ -32,7 +32,6 @@ Main code for controltower.
 """
 
 import copy
-import itertools
 import json
 import logging
 import time
@@ -45,8 +44,8 @@ import botocore
 import requests
 from boto3_type_annotations.organizations import Client as OrganizationsClient
 from boto3_type_annotations.servicecatalog import Client as ServicecatalogClient
-from cachetools import cached
 from cachetools import TTLCache
+from cachetools import cached
 from opnieuw import retry
 
 from awsapilib.authentication import Authenticator, LoggerMixin
@@ -62,7 +61,8 @@ from .controltowerexceptions import (UnsupportedTarget,
                                      UnavailableRegion,
                                      RoleCreationFailure,
                                      NoActiveArtifactRetrieved,
-                                     NonExistentOU)
+                                     NonExistentOU,
+                                     InvalidParentHierarchy)
 from .resources import (LOGGER,
                         LOGGER_BASENAME,
                         ServiceControlPolicy,
@@ -71,8 +71,10 @@ from .resources import (LOGGER,
                         ControlTowerOU,
                         AccountFactory,
                         OrganizationsOU,
+                        ResultOU,
                         GuardRail,
-                        CREATING_ACCOUNT_ERROR_MESSAGE)
+                        CREATING_ACCOUNT_ERROR_MESSAGE,
+                        OU_HIERARCHY_DEPTH_SUPPORTED)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -413,7 +415,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                            next_token_marker='NextToken')
 
     @validate_availability
-    def register_organizations_ou(self, name: str, force: bool = False) -> bool:
+    def register_organizations_ou(self, name: str, parent_hierarchy=None, force: bool = False) -> bool:
         """Registers an Organizations OU under control tower.
 
         Args:
@@ -424,36 +426,59 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             result (bool): True if successful, False otherwise.
 
         """
-        if self.get_organizational_unit_by_name(name) and not force:
-            self.logger.info('OU "%s" is already registered with Control Tower.', name)
+        if self.get_organizational_unit_by_name(name, parent_hierarchy) and not force:
+            self.logger.info(f'OU "{name}" is already registered with Control Tower.')
             return True
-        org_ou = self.get_organizations_ou_by_name(name)
+        try:
+            org_ou = self.get_organizations_ou_by_name(name, parent_hierarchy)
+        except NonExistentOU:
+            org_ou = None
         if not org_ou:
-            self.logger.error('OU "%s" does not exist under organizations.', name)
+            self.logger.error(f'OU "{name}" does not exist under organizations.')
             return False
         return self._register_org_ou_in_control_tower(org_ou)
 
+    def _get_ou_parent_data(self, parent_id):
+        try:
+            parent_ou = self.organizations.describe_organizational_unit(OrganizationalUnitId=parent_id
+                                                                        ).get('OrganizationalUnit')
+            parent_data = {f'Parent{entry}': parent_ou[entry] for entry in ('Id', 'Arn', 'Name')}
+        except botocore.exceptions.ClientError as msg:
+            # The root account does not follow the same naming convention as the other OUs and raises an exception
+            # when trying to describe it. We set it manually in that case.
+            if '(InvalidInputException)' not in str(msg):
+                raise
+            parent_data = {f'Parent{entry}': 'Root' for entry in ('Arn', 'Name')}
+            parent_data['ParentId'] = parent_id
+        return parent_data
+
     @validate_availability
-    def create_organizational_unit(self, name: str, parent_ou_name: str = '') -> bool:
+    def create_organizational_unit(self, name: str, parent_hierarchy=None, force_create=False) -> bool:
         """Creates a Control Tower managed organizational unit.
 
         Args:
             name (str): The name of the OU to create.
-            parent_ou_name(str): Name of the parent OU
+            parent_hierarchy (list): The list of the parent hierarchy path.
+            force_create (bool): Forces the creation of the hierarchy if parents are missing.
 
         Returns:
             result (bool): True if successful, False otherwise.
 
+        Raises:
+            InvalidParentHierarchy: If the hierarchy provided is longer that 5 levels.
+            NonExistentOU: If there is an OU missing in the hierarchy and force_create is not set.
+
         """
-        if not parent_ou_name:
+        if not parent_hierarchy:
             parent_ou_id = self.root_ou.id
-            self.logger.debug('Trying to create OU :"%s" under root ou', name)
+            self.logger.debug(f'Trying to create OU :"{name}" under Root OU.')
         else:
-            parent_ou = self.get_organizations_ou_by_name(parent_ou_name)
-            if not parent_ou:
-                raise NonExistentOU(f'OU with name {parent_ou_name} does not exist in Control Tower')
+            parent_hierarchy = self._validate_hierarchy(parent_hierarchy)
+            parent_ou = self._get_final_parent_ou(list(self.organizations_ous),
+                                                  parent_hierarchy,
+                                                  force_create=force_create)
             parent_ou_id = parent_ou.id
-            self.logger.debug('Trying to create OU :"%s" under "%s" ou', name, parent_ou.name)
+            self.logger.debug(f'Trying to create OU :"{name}" under "{parent_ou.name}" OU.')
         try:
             response = self.organizations.create_organizational_unit(ParentId=parent_ou_id, Name=name)
         except botocore.exceptions.ClientError as err:
@@ -464,9 +489,26 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 self.logger.error('Failed to create OU "%s" under Organizations with error code %s: %s',
                                   name, error_code, error_message)
                 return False
-        org_ou = OrganizationsOU(response.get('OrganizationalUnit', {}))
+        data = self._get_ou_parent_data(parent_ou_id)
+        data.update(response.get('OrganizationalUnit', {}))
+        org_ou = OrganizationsOU(data)
         self.logger.debug(response)
+        self.logger.info(f'Successfully created OU "{org_ou.name}" under Organizations, '
+                         f'need to register to Control Tower, this takes some time.')
         return self._register_org_ou_in_control_tower(org_ou)
+
+    def _describe_organizational_unit(self, organizational_unit_id):
+        """The details of an organizational unit."""
+        payload = self._get_api_payload(content_string={'OrganizationalUnitId': organizational_unit_id},
+                                        target='describeManagedOrganizationalUnit')
+        self.logger.debug(f'Trying to get details of OU with id "{organizational_unit_id}"')
+        response = self.session.post(self.url, json=payload)
+        if not response.ok:
+            self.logger.error('Failed to get the description of OU with response status '
+                              '"%s" and response text "%s"',
+                              response.status_code, response.text)
+            raise ServiceCallFailed(payload)
+        return [ResultOU(data) for data in response.json().get('ChildrenOrganizationalUnits')]
 
     def _register_org_ou_in_control_tower(self, org_ou):
         self.logger.debug('Registering or re-registering OU under Control Tower')
@@ -479,7 +521,18 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                               'and response text "%s"',
                               org_ou.name, response.status_code, response.text)
             return False
-        self.logger.debug('Successfully registered or re-registered OU "%s" under Control Tower', org_ou.name)
+        # Making sure that eventual consistency is not a problem here,
+        # we wait for control tower to be aware of initialising of the process and then we block on it while it runs.
+        result = self._describe_organizational_unit(org_ou.parent_ou_id)
+        while not any([all([ou.name == org_ou.name,
+                            ou.status == 'COMPLETED']) for ou in result]):
+            time.sleep(2)
+            result = self._describe_organizational_unit(org_ou.parent_ou_id)
+            match = next((ou for ou in result if ou.name == org_ou.name), None)
+            if match and match.status not in ['IN_PROGRESS', 'COMPLETED']:
+                self.logger.error(f'Failed to register OU "{org_ou.name}" with status "{match.status}"')
+                return False
+        self.logger.info(f'Successfully registered or re-registered OU "{org_ou.name}" under Control Tower')
         return True
 
     def _is_busy_with_ou_guardrails(self):
@@ -496,17 +549,21 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return bool(response.json().get('ManagedOrganizationalUnitList'))
 
     @validate_availability
-    def delete_organizational_unit(self, name: str) -> bool:
+    def delete_organizational_unit(self, name: str, parent_hierarchy=None) -> bool:
         """Deletes a Control Tower managed organizational unit.
 
         Args:
             name (str): The name of the OU to delete.
+            parent_hierarchy (list): A list of names of the hierarchy for a parent starting with 'Root'
 
         Returns:
             result (bool): True if successful, False otherwise.
 
+        Raises:
+            NonExistentOU: If an OU does not exist in the hierarchy.
+
         """
-        organizational_unit = self.get_organizational_unit_by_name(name)
+        organizational_unit = self.get_organizational_unit_by_name(name, parent_hierarchy)
         if not organizational_unit:
             self.logger.error('No organizational unit with name :"%s" registered with Control Tower', name)
             return False
@@ -524,18 +581,75 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         self.logger.debug(response)
         return bool(response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 200)
 
+    @staticmethod
+    def _validate_hierarchy(hierarchy):
+        if not isinstance(hierarchy, (list, tuple)):
+            raise InvalidParentHierarchy(f'Only "list" is a valid argument, received "{type(hierarchy)}"')
+        if isinstance(hierarchy, tuple):
+            hierarchy = list(hierarchy)
+        if not hierarchy[0] == 'Root':
+            hierarchy.insert(0, 'Root')
+        hierarchy = [ou for ou in hierarchy if ou]
+        if len(hierarchy) > OU_HIERARCHY_DEPTH_SUPPORTED:
+            raise InvalidParentHierarchy(f'Only {OU_HIERARCHY_DEPTH_SUPPORTED} levels are supported under Root OU, '
+                                         f'received {hierarchy} that is {len(hierarchy)}')
+        return hierarchy
+
+    @staticmethod
+    def _get_ou_by_attribute_pairs(ou_container, attribute_pairs):
+        return next((ou for ou in ou_container
+                     if all([getattr(ou, name) == value for name, value in attribute_pairs.items()])), None)
+
+    def _get_final_parent_ou(self, organizational_units, hierarchy, parent_ou_id=None, force_create=False):
+        organizational_unit = None
+        parent_ou_name = None
+        working_path = []
+        for name in hierarchy:
+            attributes = {'name': name,
+                          'parent_ou_id': parent_ou_id}
+            organizational_unit = ControlTower._get_ou_by_attribute_pairs(organizational_units, attributes)
+            if all([not organizational_unit, not force_create]):
+                raise NonExistentOU(f'No OU with name "{name}" and parent OU name "{parent_ou_name}" '
+                                    f'and parent id "{parent_ou_id}"')
+            if not organizational_unit:
+                self.logger.info(f'Attempting to create missing "{name}" OU.')
+                if self.create_organizational_unit(name, parent_hierarchy=working_path, force_create=force_create):
+                    organizational_unit = self.get_organizational_unit_by_name(name, parent_hierarchy=working_path)
+                else:
+                    raise NonExistentOU(f'Unable to create OU "{name}"')
+            parent_ou_id = organizational_unit.id
+            parent_ou_name = organizational_unit.name
+            working_path.append(name)
+        return organizational_unit
+
+    def _get_ou_from_container_by_name(self, container, name, parent_hierarchy=None):
+        if not parent_hierarchy:
+            attributes = {'name': name,
+                          'parent_ou_name': None if name == 'Root' else 'Root'}
+            return self._get_ou_by_attribute_pairs(container, attributes)
+        hierarchy = self._validate_hierarchy(parent_hierarchy)
+        organizational_units = list(container)
+        parent_ou = self._get_final_parent_ou(organizational_units, hierarchy)
+        attributes = {'name': name,
+                      'parent_ou_id': parent_ou.id}
+        return self._get_ou_by_attribute_pairs(container, attributes)
+
     @validate_availability
-    def get_organizational_unit_by_name(self, name):
+    def get_organizational_unit_by_name(self, name, parent_hierarchy=None):
         """Gets a Control Tower managed Organizational Unit by name.
 
         Args:
             name (str): The name of the organizational unit to retrieve.
+            parent_hierarchy (list): A list of names of the hierarchy for a parent starting with 'Root'
 
         Returns:
             result (ControlTowerOU): A OU object on success, None otherwise.
 
+        Raises:
+            NonExistentOU: If an OU does not exist in the hierarchy.
+
         """
-        return next((ou for ou in self.organizational_units if ou.name == name), None)
+        return self._get_ou_from_container_by_name(list(self.organizational_units), name, parent_hierarchy)
 
     @validate_availability
     def get_organizational_unit_by_id(self, id_):
@@ -559,25 +673,43 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             organizational_units (OrganizationsOU): A list of organizational units objects under Organizations.
 
         """
-        paginator = self.organizations.get_paginator('list_organizational_units_for_parent')
-        pages = paginator.paginate(ParentId=self.root_ou.id)
-        response = list(itertools.chain.from_iterable([page['OrganizationalUnits'] for page in pages]))
+        client = self.organizations
+        root_ou = OrganizationsOU({'Id': self.root_ou.id,
+                                   'Name': 'Root',
+                                   'Arn': 'RootArn',
+                                   'ParentId': None,
+                                   'ParentArn': None,
+                                   'ParentName': None})
+        result = [root_ou]
 
-        return [OrganizationsOU(data)
-                for data in response]
+        def get_ou_ids(parent_id):
+            paginator = client.get_paginator('list_organizational_units_for_parent')
+            iterator = paginator.paginate(ParentId=parent_id)
+            for page in iterator:
+                for unit in page['OrganizationalUnits']:
+                    try:
+                        unit.update(self._get_ou_parent_data(parent_id))
+                        org_ou = OrganizationsOU(unit)
+                        result.append(org_ou)
+                        result.extend(get_ou_ids(org_ou.id))
+                    except TypeError:
+                        continue
+        get_ou_ids(self.root_ou.id)
+        return result
 
     @validate_availability
-    def get_organizations_ou_by_name(self, name):
+    def get_organizations_ou_by_name(self, name, parent_hierarchy=None):
         """Gets an Organizations managed Organizational Unit by name.
 
         Args:
             name (str): The name of the organizational unit to retrieve.
+            parent_hierarchy (list): A list of names of the hierarchy for a parent starting with 'Root'
 
         Returns:
             result (OrganizationsOU): A OU object on success, None otherwise.
 
         """
-        return next((ou for ou in self.organizations_ous if ou.name == name), None)
+        return self._get_ou_from_container_by_name(list(self.organizations_ous), name, parent_hierarchy)
 
     @validate_availability
     def get_organizations_ou_by_id(self, id_):
@@ -723,45 +855,58 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     @retry(retry_on_exceptions=OUCreating, max_calls_total=7, retry_window_after_first_call_in_seconds=60)
     @validate_availability
-    def create_account(self,  # pylint: disable=too-many-arguments
+    def create_account(self,  # pylint: disable=too-many-arguments, too-many-locals
                        account_name: str,
                        account_email: str,
                        organizational_unit: str,
-                       parent_organizational_unit: str = '',
+                       parent_hierarchy: list = None,
                        product_name: str = None,
                        sso_first_name: str = None,
                        sso_last_name: str = None,
-                       sso_user_email: str = None) -> bool:
+                       sso_user_email: str = None,
+                       force_parent_hierarchy_creation=False) -> bool:
         """Creates a Control Tower managed account.
 
         Args:
             account_name (str): The name of the account.
             account_email (str): The email of the account.
             organizational_unit (str): The organizational unit that the account should be under.
-            parent_organizational_unit(str): The Parent organizational unit under which the new ou will be created
+            parent_hierarchy (list): The hierarchy under where the OU needs to be placed. Defaults to Root.
             product_name (str): The product name, if nothing is provided it uses the account name.
             sso_first_name (str): The first name of the SSO user, defaults to "Control"
             sso_last_name (str): The last name of the SSO user, defaults to "Tower"
             sso_user_email (str): The email of the sso, if nothing is provided it uses the account email.
+            force_parent_hierarchy_creation (bool): Forces the creation of missing OUs in the provided hierarchy.
 
         Returns:
             result (bool): True on success, False otherwise.
 
+        Raises:
+            NonExistentOU: If the parent hierarchy provided does not exist and force is not provided as a flag.
+            InvalidParentHierarchy: If the parent hierarchy provided is invalid and force is not provided as a flag.
+            EmailInUse: If email provided is already used in AWS.
+
         """
+        if self.is_email_used(account_email):
+            raise EmailInUse(account_email)
         product_name = product_name or account_name
         sso_user_email = sso_user_email or account_email
         sso_first_name = sso_first_name or 'Control'
         sso_last_name = sso_last_name or 'Tower'
-        if not self.get_organizational_unit_by_name(organizational_unit):
+        try:
+            ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
+        except NonExistentOU:
+            message = f'There does not seem to be an OU {organizational_unit} under hierarchy {parent_hierarchy}'
+            if not force_parent_hierarchy_creation:
+                raise NonExistentOU(message)
+            self.logger.debug(message)
             if not self.create_organizational_unit(name=organizational_unit,
-                                                   parent_ou_name=parent_organizational_unit):
-                self.logger.error('Unable to create the organizational unit!')
+                                                   parent_hierarchy=parent_hierarchy,
+                                                   force_create=force_parent_hierarchy_creation):
+                self.logger.error('Unable to create the organizational unit or hierarchy required!')
                 return False
-        while self.busy:
-            time.sleep(1)
-        if parent_organizational_unit:
-            ou_details = self.get_organizational_unit_by_name(organizational_unit)
-            organizational_unit = f'{organizational_unit} ({ou_details.id})'
+            ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
+        organizational_unit = f'{organizational_unit} ({ou_details.id})'
         arguments = {'ProductId': self._account_factory.product_id,
                      'ProvisionedProductName': product_name,
                      'ProvisioningArtifactId': self._active_artifact.get('Id'),

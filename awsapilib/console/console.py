@@ -129,6 +129,14 @@ class MFA:
         return self._data.get(self._url).get('userName')
 
 
+@dataclass
+class VirtualMFADevice:
+    """Models the active MFA device."""
+
+    seed: str
+    serial: str
+
+
 class RootAuthenticator(BaseAuthenticator):
     """Interacts with the console to retrieve console and billing page sessions."""
 
@@ -352,7 +360,7 @@ class MfaManager(LoggerMixin):
         if not response.ok:
             raise UnableToEnableVirtualMFA(response.text)
         self.logger.info(f'Successfully enabled mfa device with serial number "{serial_number}"')
-        return seed
+        return VirtualMFADevice(seed, serial_number)
 
     def create_virtual_device(self, name='root-account-mfa-device'):
         """Creates a virtual MFA device with the provided name.
@@ -640,6 +648,7 @@ class AccountManager(BaseConsoleInterface):
         self.mfa_serial = mfa_serial
         self._mfa_manager = None
         self._iam_access = None
+        self._account_id = None
 
     def terminate_account(self):
         """Terminates the account matching the info provided.
@@ -744,3 +753,20 @@ class AccountManager(BaseConsoleInterface):
                                                 mfa_serial=self.mfa_serial)
             self._iam_access = IamAccess(session)
         return self._iam_access
+
+    @property
+    def account_id(self):
+        """IAM."""
+        if self._account_id is None:
+            account_url = f'{Urls.billing_rest}/v1.0/account'
+            session = self._get_billing_session(self.email,
+                                                self.password,
+                                                self.region,
+                                                unfiltered_session=False,
+                                                mfa_serial=self.mfa_serial)
+            response = session.get(account_url)
+            if not response.ok:
+                self.logger.error(f'Unsuccessful response received: {response.text} '
+                                  f'with status code: {response.status_code}')
+            self._account_id = response.json().get('accountId')
+        return self._account_id
