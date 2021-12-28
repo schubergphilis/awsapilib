@@ -145,3 +145,9 @@ History
 ------------------
 
 * Added support for nested OUs
+
+
+2.0.0 (28-12-2021)
+------------------
+
+* Releasing support for 5 levels of nested OUs
