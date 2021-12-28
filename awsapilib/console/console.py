@@ -640,6 +640,7 @@ class AccountManager(BaseConsoleInterface):
         self.mfa_serial = mfa_serial
         self._mfa_manager = None
         self._iam_access = None
+        self._account_id = None
 
     def terminate_account(self):
         """Terminates the account matching the info provided.
@@ -744,3 +745,20 @@ class AccountManager(BaseConsoleInterface):
                                                 mfa_serial=self.mfa_serial)
             self._iam_access = IamAccess(session)
         return self._iam_access
+
+    @property
+    def account_id(self):
+        """IAM."""
+        if self._account_id is None:
+            account_url = f'{Urls.billing_rest}/v1.0/account'
+            session = self._get_billing_session(self.email,
+                                                self.password,
+                                                self.region,
+                                                unfiltered_session=False,
+                                                mfa_serial=self.mfa_serial)
+            response = session.get(account_url)
+            if not response.ok:
+                self.logger.error(f'Unsuccessful response received: {response.text} '
+                                  f'with status code: {response.status_code}')
+            self._account_id = response.json().get('accountId')
+        return self._account_id
