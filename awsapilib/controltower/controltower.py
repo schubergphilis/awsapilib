@@ -895,6 +895,14 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         sso_last_name = sso_last_name or 'Tower'
         try:
             ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
+            if not ou_details:
+                raise NonExistentOU('Unable to create the required OU.')
+            if not self.create_organizational_unit(name=organizational_unit,
+                                                   parent_hierarchy=parent_hierarchy,
+                                                   force_create=force_parent_hierarchy_creation):
+                self.logger.error('Unable to create the organizational unit or hierarchy required!')
+                return False
+            ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
         except NonExistentOU:
             message = f'There does not seem to be an OU {organizational_unit} under hierarchy {parent_hierarchy}'
             if not force_parent_hierarchy_creation:
@@ -906,6 +914,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 self.logger.error('Unable to create the organizational unit or hierarchy required!')
                 return False
             ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
+        if not ou_details:
+            raise NonExistentOU('Unable to create the reuired OU.')
         organizational_unit = f'{organizational_unit} ({ou_details.id})'
         arguments = {'ProductId': self._account_factory.product_id,
                      'ProvisionedProductName': product_name,
