@@ -157,3 +157,9 @@ History
 ------------------
 
 * Fixed a bug where on account creation the OU was not created unless there was a failure with the parent hierarchy.
+
+
+2.0.2 (29-12-2021)
+------------------
+
+* Fixed a bug with the handling of the OU without hierarchies.
