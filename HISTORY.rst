@@ -151,3 +151,9 @@ History
 ------------------
 
 * Releasing support for 5 levels of nested OUs
+
+
+2.0.1 (29-12-2021)
+------------------
+
+* Fixed a bug where on account creation the OU was not created unless there was a failure with the parent hierarchy.
