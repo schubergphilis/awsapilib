@@ -627,6 +627,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             attributes = {'name': name,
                           'parent_ou_name': None if name == 'Root' else 'Root'}
             return self._get_ou_by_attribute_pairs(container, attributes)
+        parent_hierarchy = parent_hierarchy or []
         hierarchy = self._validate_hierarchy(parent_hierarchy)
         organizational_units = list(container)
         parent_ou = self._get_final_parent_ou(organizational_units, hierarchy)
@@ -895,27 +896,20 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         sso_last_name = sso_last_name or 'Tower'
         try:
             ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
-            if not ou_details:
-                raise NonExistentOU('Unable to create the required OU.')
-            if not self.create_organizational_unit(name=organizational_unit,
-                                                   parent_hierarchy=parent_hierarchy,
-                                                   force_create=force_parent_hierarchy_creation):
-                self.logger.error('Unable to create the organizational unit or hierarchy required!')
-                return False
-            ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
         except NonExistentOU:
+            ou_details = None
+        if all([not ou_details, not force_parent_hierarchy_creation]):
             message = f'There does not seem to be an OU {organizational_unit} under hierarchy {parent_hierarchy}'
-            if not force_parent_hierarchy_creation:
-                raise NonExistentOU(message)
-            self.logger.debug(message)
+            raise NonExistentOU(message)
+        if not ou_details:
             if not self.create_organizational_unit(name=organizational_unit,
                                                    parent_hierarchy=parent_hierarchy,
                                                    force_create=force_parent_hierarchy_creation):
                 self.logger.error('Unable to create the organizational unit or hierarchy required!')
                 return False
-            ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
+        ou_details = self.get_organizational_unit_by_name(organizational_unit, parent_hierarchy)
         if not ou_details:
-            raise NonExistentOU('Unable to create the reuired OU.')
+            raise NonExistentOU('Unable to create the required OU.')
         organizational_unit = f'{organizational_unit} ({ou_details.id})'
         arguments = {'ProductId': self._account_factory.product_id,
                      'ProvisionedProductName': product_name,
