@@ -163,3 +163,9 @@ History
 ------------------
 
 * Fixed a bug with the handling of the OU without hierarchies.
+
+
+2.1.0 (30-12-2021)
+------------------
+
+* Implemented capability of retrieving account by email.
