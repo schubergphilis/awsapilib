@@ -825,6 +825,16 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                      if data.get('PhysicalId') == account_id), None)
 
     @validate_availability
+    def get_account_by_email(self, email):
+        """Retrieves an account by email.
+
+        Returns:
+            account (Account): An account object that matches the email or None.
+
+        """
+        return self._get_by_attribute('email', email)
+
+    @validate_availability
     def get_account_by_name(self, name):
         """Retrieves an account by name.
 
