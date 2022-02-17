@@ -875,7 +875,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                        sso_first_name: str = None,
                        sso_last_name: str = None,
                        sso_user_email: str = None,
-                       force_parent_hierarchy_creation=False) -> bool:
+                       force_parent_hierarchy_creation=False,
+                       wait_for_controltower=True) -> bool:
         """Creates a Control Tower managed account.
 
         Args:
@@ -888,6 +889,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             sso_last_name (str): The last name of the SSO user, defaults to "Tower"
             sso_user_email (str): The email of the sso, if nothing is provided it uses the account email.
             force_parent_hierarchy_creation (bool): Forces the creation of missing OUs in the provided hierarchy.
+            wait_for_controltower (bool): Wait for controltower to be aware of service catalog account creation process.
 
         Returns:
             result (bool): True on success, False otherwise.
@@ -949,7 +951,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             return False
         # Making sure that eventual consistency is not a problem here,
         # we wait for control tower to be aware of the service catalog process
-        while not self.busy:
+        while wait_for_controltower and not self.busy:
             time.sleep(1)
         return True
 
