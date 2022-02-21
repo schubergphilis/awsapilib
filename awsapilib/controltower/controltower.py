@@ -808,13 +808,12 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         """
         changing_products = self.service_catalog.search_provisioned_products(
             Filters={
-                "SearchQuery":["status:UNDER_CHANGE"]
+                "SearchQuery":["status:UNDER_CHANGE type:CONTROL_TOWER_ACCOUNT"]
             }
         )
 
         return [ControlTowerAccount(self, {'AccountId': data.get('PhysicalId')})
-                for data in changing_products.get('ProvisionedProducts', [])
-                if data.get('Type', '') == 'CONTROL_TOWER_ACCOUNT']
+                for data in changing_products.get('ProvisionedProducts', [])]
 
     def _filter_for_status(self, status):
         return [account for account in self.accounts if account.service_catalog_status == status]
