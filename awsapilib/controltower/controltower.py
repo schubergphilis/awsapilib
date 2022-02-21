@@ -806,12 +806,15 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             accounts (Account): A list of under change account objects under control tower's control.
 
         """
-        products = self.service_catalog.search_provisioned_products()
+        changing_products = self.service_catalog.search_provisioned_products(
+            Filters={
+                "SearchQuery":["status:UNDER_CHANGE"]
+            }
+        )
 
         return [ControlTowerAccount(self, {'AccountId': data.get('PhysicalId')})
-                for data in products.get('ProvisionedProducts', [])
-                if all([data.get('Type', '') == 'CONTROL_TOWER_ACCOUNT',
-                        data.get('Status', '') == 'UNDER_CHANGE'])]
+                for data in changing_products.get('ProvisionedProducts', [])
+                if data.get('Type', '') == 'CONTROL_TOWER_ACCOUNT']
 
     def _filter_for_status(self, status):
         return [account for account in self.accounts if account.service_catalog_status == status]
