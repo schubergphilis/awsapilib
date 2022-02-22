@@ -809,7 +809,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         """
         changing_products = self.service_catalog.search_provisioned_products(
             Filters={
-                "SearchQuery":[PROVISIONED_PRODUCTS_UNDER_CHANGE_FILTER]
+                "SearchQuery":PROVISIONED_PRODUCTS_UNDER_CHANGE_FILTER
             }
         )
 
