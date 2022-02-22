@@ -169,3 +169,9 @@ History
 ------------------
 
 * Implemented capability of retrieving account by email.
+
+
+2.1.1 (22-02-2022)
+------------------
+
+* Updated 'get_changing_accounts' to use the search_provisioned_products with a filter which will fix the bug where only the first 100 provisioned products were checked for status "UNDER_CHAGE".
