@@ -74,7 +74,8 @@ from .resources import (LOGGER,
                         ResultOU,
                         GuardRail,
                         CREATING_ACCOUNT_ERROR_MESSAGE,
-                        OU_HIERARCHY_DEPTH_SUPPORTED)
+                        OU_HIERARCHY_DEPTH_SUPPORTED,
+                        PROVISIONED_PRODUCTS_UNDER_CHANGE_FILTER)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -808,7 +809,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         """
         changing_products = self.service_catalog.search_provisioned_products(
             Filters={
-                "SearchQuery":["status:UNDER_CHANGE type:CONTROL_TOWER_ACCOUNT"]
+                "SearchQuery":[PROVISIONED_PRODUCTS_UNDER_CHANGE_FILTER]
             }
         )
 
