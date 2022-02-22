@@ -74,7 +74,8 @@ from .resources import (LOGGER,
                         ResultOU,
                         GuardRail,
                         CREATING_ACCOUNT_ERROR_MESSAGE,
-                        OU_HIERARCHY_DEPTH_SUPPORTED)
+                        OU_HIERARCHY_DEPTH_SUPPORTED,
+                        PROVISIONED_PRODUCTS_UNDER_CHANGE_FILTER)
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -806,12 +807,14 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             accounts (Account): A list of under change account objects under control tower's control.
 
         """
-        products = self.service_catalog.search_provisioned_products()
+        changing_products = self.service_catalog.search_provisioned_products(
+            Filters={
+                "SearchQuery":PROVISIONED_PRODUCTS_UNDER_CHANGE_FILTER
+            }
+        )
 
         return [ControlTowerAccount(self, {'AccountId': data.get('PhysicalId')})
-                for data in products.get('ProvisionedProducts', [])
-                if all([data.get('Type', '') == 'CONTROL_TOWER_ACCOUNT',
-                        data.get('Status', '') == 'UNDER_CHANGE'])]
+                for data in changing_products.get('ProvisionedProducts', [])]
 
     def _filter_for_status(self, status):
         return [account for account in self.accounts if account.service_catalog_status == status]
