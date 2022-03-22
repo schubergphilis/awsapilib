@@ -149,42 +149,11 @@ class RootAuthenticator(BaseAuthenticator):
 
     def _get_console_root_session(self, redirect_url):
         service = 'console'
-        home_url_response = self._get_response(redirect_url, extra_cookies=[FilterCookie('JSESSIONID', ),
-                                                                            FilterCookie('aws-userInfo-signed', ),
-                                                                            FilterCookie('aws-creds', ),
+        home_url_response = self._get_response(redirect_url, extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                                             FilterCookie('aws-creds-code-verifier', )])
         url = home_url_response.headers.get('Location')
-        _ = self._get_response(url, extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                   FilterCookie('aws-creds', f'{service}'),
-                                                   FilterCookie('aws-creds-code-verifier',
-                                                                f'{service}')])
-        url = f'{self.urls.regional_console_home}'
-        params = {'region': self.region}
-        _ = self._get_response(url,
-                               params=params,
-                               extra_cookies=[FilterCookie('JSESSIONID', ),
-                                              FilterCookie('aws-userInfo-signed', ),
-                                              FilterCookie('aws-creds', f'{service}'),
-                                              FilterCookie('aws-creds-code-verifier',
-                                                           f'{service}')])
-        params.update({'hashArgs': '#'})
-        hash_args = self._get_response(url,
-                                       params=params,
-                                       extra_cookies=[FilterCookie('JSESSIONID', ),
-                                                      FilterCookie('aws-userInfo-signed', ),
-                                                      FilterCookie('aws-creds', f'{service}'),
-                                                      FilterCookie('aws-creds-code-verifier', f'{service}')])
-        oauth_url = hash_args.headers.get('Location')
-        oauth = self._get_response(oauth_url,
-                                   extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
-                                                  FilterCookie('aws-userInfo-signed', )])
-        oauth_challenge = self._get_response(oauth.headers.get('Location'),
-                                             extra_cookies=[FilterCookie('JSESSIONID', self.urls.regional_console),
-                                                            FilterCookie('aws-userInfo-signed', ),
-                                                            FilterCookie('aws-creds-code-verifier', f'/{service}')])
-        dashboard = self._get_response(oauth_challenge.headers.get('Location'),
-                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
-                                                      FilterCookie('JSESSIONID', )])
+        dashboard = self._get_response(url, extra_cookies=[FilterCookie('aws-userInfo-signed', ),
+                                                           FilterCookie('aws-creds', f'{service}', )])
         if not dashboard.ok:
             self.logger.error(f'Received broken response: {dashboard.text}')
         return dashboard.ok
@@ -204,25 +173,37 @@ class RootAuthenticator(BaseAuthenticator):
         if not self._get_console_root_session(redirect_url):
             raise InvalidAuthentication('Unable to get a valid authenticated session for root console.')
         service = 'billing'
-        url = f'{self.urls.billing_home}?#/account'
-        _ = self._session.get(url)
-        url = f'{self.urls.billing_home}'
+        url = self.urls.billing_home
+
+        _ = self._get_response(url)
+
         hash_args = self._get_response(url,
                                        params={'state': 'hashArgs#'},
-                                       extra_cookies=[FilterCookie('JSESSIONID', ),
-                                                      FilterCookie('aws-userInfo-signed', ),
+                                       extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                       FilterCookie('aws-creds-code-verifier', f'/{service}')])
-        oauth = self._get_response(hash_args.headers.get('Location'),
+        _ = self._get_response(hash_args.headers.get('Location'),
+                               extra_cookies=[
+                                   FilterCookie('aws-userInfo-signed', )])
+
+        regional_url = f'{self.urls.scheme}us-east-1.console.{self.urls.root_domain}/billing/home'
+        regional_response = self._get_response(regional_url,
+                                               params={'state': 'hashArgs#', 'skipRegion': 'true',
+                                                       'region': 'us-east-1'},
+                                               extra_cookies=[FilterCookie('aws-userInfo-signed', ),
+                                                              FilterCookie('aws-creds-code-verifier', f'/{service}')])
+
+        oauth = self._get_response(regional_response.headers.get('Location'),
                                    extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
-                                                  FilterCookie('aws-userInfo-signed', )])
+                                                  FilterCookie('aws-userInfo-signed', ),
+                                                  FilterCookie('aws-signin-account-info', )])
+
         oauth_challenge = self._get_response(oauth.headers.get('Location'),
-                                             extra_cookies=[FilterCookie('JSESSIONID', self.urls.regional_console),
-                                                            FilterCookie('aws-userInfo-signed', ),
+                                             extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                             FilterCookie('aws-creds-code-verifier', f'/{service}')
                                                             ])
+
         dashboard = self._get_response(oauth_challenge.headers.get('Location'),
-                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
-                                                      FilterCookie('JSESSIONID')])
+                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}')])
         if unfiltered_session:
             return self._session
         csrf_token_data = CsrfTokenData(entity_type='input',
@@ -231,7 +212,7 @@ class RootAuthenticator(BaseAuthenticator):
                                         headers_name='x-awsbc-xsrf-token')
         extra_cookies = [FilterCookie('aws-creds', f'/{service}'),
                          FilterCookie('aws-signin-csrf', '/signin'),
-                         FilterCookie('JSESSIONID', )]
+                         ]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
     def get_iam_root_session(self, redirect_url):
@@ -464,7 +445,7 @@ class BaseConsoleInterface(LoggerMixin):
         return success
 
     def _resolve_account_type(self, email):
-        response = self._resolve_account_type_response(email, {'hashArgs': '#a'})
+        response = self._resolve_account_type_response(email)
         success = self._validate_response(response)
         if not success:
             raise UnableToResolveAccount(f'Failed to resolve account type with response: {response.text} '
@@ -472,24 +453,23 @@ class BaseConsoleInterface(LoggerMixin):
         self.logger.debug(f'Resolved account type successfully with response :{response.text}')
         return success
 
-    def _resolve_account_type_response(self, email, extra_parameters=None, session=None):
+    def _resolve_account_type_response(self, email, session=None):
         session_ = session if session else self.session
+
         parameters = {'action': 'resolveAccountType',
-                      'email': email}
-        if extra_parameters:
-            parameters.update(extra_parameters)
-        _ = session_.get(self._console_home_url, params=parameters)
-        parameters.update({'csrf': session_.cookies.get('aws-signin-csrf', path='/signin')})
+                      'email': email,
+                      'csrf': session_.cookies.get('aws-signin-csrf', path='/signin')}
         response = session_.post(self._signin_url, data=parameters)
         self.logger.debug('Getting the resolve account type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
         return session_.post(self._signin_url, data=parameters)
 
-    def get_mfa_type(self, email):
+    def get_mfa_type(self, email, redirect_url_for_mfa):
         """Gets the MFA type of the account.
 
         Args:
             email: The email of the account to check for MFA settings.
+            redirect_url_for_mfa: The redirect URL for MFA.
 
         Returns:
             The type of MFA set (only "SW" currently supported) None if no MFA is set.
@@ -498,11 +478,7 @@ class BaseConsoleInterface(LoggerMixin):
         url = f'{Urls.sign_in}/mfa'
         payload = {'email': email,
                    'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin'),
-                   'redirect_uri': f'{Urls.console_home}?'
-                                   f'fromtb=true&'
-                                   f'hashArgs=%23&'
-                                   f'isauthcode=true&'
-                                   f'state=hashArgsFromTB_us-east-1_4d16544228963f5b'
+                   'redirect_uri': redirect_url_for_mfa
                    }
         response = self.session.post(url, data=payload)
         if not response.ok:
@@ -512,8 +488,11 @@ class BaseConsoleInterface(LoggerMixin):
         return None if mfa_type == 'NONE' else mfa_type
 
     def _get_root_console_redirect(self, email, password, session, mfa_serial=None):
-        url = Urls.console_home
-        parameters = {'hashArgs': '#a'}
+
+        urls = Urls('us-east-1')
+        url = urls.regional_console_home
+        parameters = {'hashArgs': '#a', 'skipRegion': 'true', 'region': 'us-east-1'}
+
         self.logger.debug(f'Trying to get url: {url} with parameters :{parameters}')
         response = session.get(url, params=parameters)
         if not response.ok:
@@ -525,7 +504,7 @@ class BaseConsoleInterface(LoggerMixin):
                 response.json().get('properties', {}).get('captchaStatusToken') is None]):
             raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
                                          f'with status code: {response.status_code}')
-        mfa_type = self.get_mfa_type(email)
+        mfa_type = self.get_mfa_type(email, oidc.redirect_url)
         if mfa_type:
             if not mfa_serial:
                 raise NoMFAProvided(f'Account with email "{email}" is protected by mfa type "{mfa_type}" but no serial '
@@ -584,6 +563,10 @@ class PasswordManager(BaseConsoleInterface):
 
         """
         self.logger.debug(f'Trying to resolve account type for email :{email}')
+
+        urls = Urls('us-east-1')
+        _ = self.session.get(urls.regional_console_home, params={'hashArgs': '#a', 'region': 'us-east-1'})
+
         try:
             self._resolve_account_type(email)
         except UnableToResolveAccount:
