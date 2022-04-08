@@ -435,55 +435,6 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
                   'SigninToken': self._get_signin_token()}
         return f'{self.urls.federation}?{urllib.parse.urlencode(params)}'
 
-    def get_control_tower_authenticated_session(self):
-        """Authenticates to control tower and returns an authenticated session.
-
-        Returns:
-            session (requests.Session): An authenticated session with headers and cookies set.
-
-        """
-        service = 'controltower'
-        self._session.get(self.get_signed_url())
-        url = f'{self.urls.regional_console}/{service}/home'
-        host = urllib.parse.urlparse(url)[1]
-        self.logger.debug('Setting host to: %s', host)
-        self._get_response(url,
-                           params={'region': self.region},
-                           extra_cookies=[FilterCookie('JSESSIONID'),
-                                          FilterCookie('aws-userInfo-signed')])
-        hash_args = self._get_response(url,
-                                       params={'state': 'hashArgs#'},
-                                       extra_cookies=[FilterCookie('JSESSIONID', self.urls.regional_console),
-                                                      FilterCookie('aws-userInfo-signed',),
-                                                      FilterCookie('aws-creds-code-verifier', self.urls.regional_console
-                                                                   )])
-        oauth = self._get_response(hash_args.headers.get('Location'),
-                                   extra_cookies=[FilterCookie('JSESSIONID', self.urls.regional_console),
-                                                  FilterCookie('aws-creds', self.domains.sign_in),
-                                                  FilterCookie('aws-userInfo-signed', ),
-                                                  FilterCookie('aws-creds-code-verifier', f'/{service}')],)
-        oauth_challenge = self._get_response(oauth.headers.get('Location'),
-                                             extra_cookies=[FilterCookie('JSESSIONID', self.urls.regional_console),
-                                                            FilterCookie('aws-userInfo-signed',),
-                                                            FilterCookie('aws-creds', self.domains.sign_in),
-                                                            FilterCookie('aws-creds-code-verifier', f'/{service}')])
-        self._get_response(oauth_challenge.headers.get('Location'),
-                           extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
-                                          FilterCookie('JSESSIONID', host),
-                                          FilterCookie('aws-userInfo-signed')])
-        dashboard = self._get_response(url,
-                                       params={'region': self.region},
-                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
-                                                      FilterCookie('JSESSIONID', host),
-                                                      FilterCookie('aws-consoleInfo'),
-                                                      FilterCookie('aws-userInfo-signed')])
-        csrf_token_data = CsrfTokenData(entity_type='meta',
-                                        attributes={'name': 'awsc-csrf-token'},
-                                        attribute_value='content',
-                                        headers_name='X-CSRF-TOKEN')
-        extra_cookies = [FilterCookie('JSESSIONID', self.domains.regional_console),
-                         FilterCookie('aws-creds', f'{self.domains.regional_console}/{service}')]
-        return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
     def get_sso_authenticated_session(self):
         """Authenticates to Single Sign On and returns an authenticated session.
