@@ -41,6 +41,10 @@ from typing import Optional
 
 import boto3
 import botocore
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import ReadOnlyCredentials
+
 import requests
 from boto3_type_annotations.organizations import Client as OrganizationsClient
 from boto3_type_annotations.servicecatalog import Client as ServicecatalogClient
@@ -142,11 +146,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                                                   **self.aws_authenticator.assumed_role_credentials)
         self.organizations: OrganizationsClient = boto3.client('organizations',
                                                                **self.aws_authenticator.assumed_role_credentials)
-        self.session = self._get_authenticated_session()
+
         self._region = region
         self._is_deployed = None
-        self.url = f'https://{self.region}.console.aws.amazon.com/controltower/api/controltower'
-        self._iam_admin_url = f'https://{self.region}.console.aws.amazon.com/controltower/api/iamadmin'
+
         self._account_factory_ = None
         self.settling_time = settling_time
         self._root_ou = None
@@ -166,13 +169,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     def is_deployed(self):
         """The deployment status of control tower."""
         if not self._is_deployed:
-            caller_region = self.aws_authenticator.region
-            url = f'https://{caller_region}.console.aws.amazon.com/controltower/api/controltower'
-            payload = self._get_api_payload(content_string={},
-                                            target='getLandingZoneStatus',
-                                            region=caller_region)
-            self.logger.debug('Trying to get the deployed status of the landing zone with payload "%s"', payload)
-            response = self.session.post(url, json=payload)
+            self.logger.debug('Trying to get the deployed status of the landing zone')
+            response = self.call('GetLandingZoneStatus')
             if not response.ok:
                 self.logger.error('Failed to get the deployed status of the landing zone with response status '
                                   '"%s" and response text "%s"',
@@ -190,9 +188,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             return self._region
         if self._region is None:
             caller_region = self.aws_authenticator.region
-            url = f'https://{caller_region}.console.aws.amazon.com/controltower/api/controltower'
-            payload = self._get_api_payload(content_string={}, target='getHomeRegion', region=caller_region)
-            response = self.session.post(url, json=payload)
+            response = self.call('GetHomeRegion')
             if not response.ok:
                 raise ServiceCallFailed(payload)
             self._region = response.json().get('HomeRegion') or self.aws_authenticator.region
@@ -249,8 +245,41 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             self._root_ou = self.get_organizational_unit_by_name('Root')
         return self._root_ou
 
-    def _get_authenticated_session(self):
-        return self.aws_authenticator.get_control_tower_authenticated_session()
+
+    def call(self, method, data = {}):
+        host = f"prod.{self.aws_authenticator.region}.blackbeard.aws.a2z.com"
+        url = f"https://{host}/"
+        data_encoded = json.dumps(data)
+        headers = {
+            "Host": host,
+            'Content-Type': 'application/x-amz-json-1.1',
+            'X-Amz-Target': f'AWSBlackbeardService.{method}',
+        }
+        request = AWSRequest(method="POST", url=url, data=data_encoded, headers=headers)
+        session = self.aws_authenticator.session_credentials
+        creds = ReadOnlyCredentials(session['sessionId'], session['sessionKey'], session['sessionToken'])
+        SigV4Auth(creds, "controltower", self.aws_authenticator.region).add_auth(request)
+        return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded)
+
+    def _call_iam_admin(self, method, data = {}):
+        return self._call_aws_api(endpoint = "iamadmin.amazonaws.com", service="AWSIdentityManagementAdminService", sigv4_service_name="iamadmin", method=method, data=data, amazon_json_version="1.0")
+
+    def _call_aws_api(self, endpoint, service, sigv4_service_name, method, data, amazon_json_version):
+        url = f"https://{endpoint}/"
+        data_encoded = json.dumps(data)
+        headers = {
+            "Host": endpoint,
+            'Content-Type': f'application/x-amz-json-{amazon_json_version}',
+            'X-Amz-Target': f'{service}.{method}',
+        }
+        print(headers)
+        print(data)
+        request = AWSRequest(method="POST", url=url, data=data_encoded, headers=headers)
+        session = self.aws_authenticator.session_credentials
+        creds = ReadOnlyCredentials(session['sessionId'], session['sessionKey'], session['sessionToken'])
+        SigV4Auth(creds, sigv4_service_name, "us-east-1").add_auth(request)
+        return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded)
+
 
     @property
     def active_artifact_id(self) -> str:
@@ -287,27 +316,6 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if target not in self.supported_targets:
             raise UnsupportedTarget(target)
         return target
-
-    def _get_api_payload(self,
-                         *,
-                         content_string: str,
-                         target: str,
-                         method: str = 'POST',
-                         params: Optional[dict] = None,
-                         path: Optional[str] = None,
-                         region: Optional[str] = None) -> dict:
-        """Constructs the API payload."""
-        target = self._validate_target(target)
-        payload = {'contentString': json.dumps(content_string),
-                   'headers': {'Content-Type': self.api_content_type,
-                               'X-Amz-Target': f'AWSBlackbeardService.{target[0].capitalize() + target[1:]}',
-                               'X-Amz-User-Agent': self.api_user_agent},
-                   'method': method,
-                   'operation': target,
-                   'params': params or {},
-                   'path': path or '/',
-                   'region': region or self.region}
-        return copy.deepcopy(payload)
 
     def _get_paginated_results(self,
                                *,
@@ -538,10 +546,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def _is_busy_with_ou_guardrails(self):
         """The status of guardrails application for OUs in control tower."""
-        payload = self._get_api_payload(content_string={'OrganizationUnitStatus': 'IN_PROGRESS'},
-                                        target='listManagedOrganizationalUnits')
+        payload = {'OrganizationUnitStatus': 'IN_PROGRESS'}
         self.logger.debug('Trying to get the status of OU guardrails application with payload "%s"', payload)
-        response = self.session.post(self.url, json=payload)
+        response = self.call('ListManagedOrganizationalUnits', payload)
         if not response.ok:
             self.logger.error('Failed to get the status OU guardrails application with response status '
                               '"%s" and response text "%s"',
@@ -1074,10 +1081,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 for region in self.region_metadata_list if region.get('RegionStatus') == 'NOT_GOVERNED']
 
     def _get_status(self):
-        payload = self._get_api_payload(content_string={},
-                                        target='getLandingZoneStatus')
-        self.logger.debug('Trying to get the landing zone status with payload "%s"', payload)
-        response = self.session.post(self.url, json=payload)
+        self.logger.debug('Trying to get the landing zone status')
+        response = self.call('GetLandingZoneStatus')
         if not response.ok:
             self.logger.error('Failed to get the landing zone status with response status "%s" and response text "%s"',
                               response.status_code, response.text)
@@ -1152,10 +1157,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def _pre_deploy_check(self):
         """Pre deployment check."""
-        payload = self._get_api_payload(content_string={},
-                                        target='performPreLaunchChecks')
-        self.logger.debug('Trying the pre deployment check with payload "%s"', payload)
-        response = self.session.post(self.url, json=payload)
+        self.logger.debug('Trying the pre deployment check')
+        response = self.call('PerformPreLaunchChecks')
         if not response.ok:
             self.logger.error('Failed to do the pre deployment checks with response status '
                               '"%s" and response text "%s"',
@@ -1165,10 +1168,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     def is_email_used(self, email):
         """Check email for availability to be used or if it is already in use."""
-        payload = self._get_api_payload(content_string={'AccountEmail': email},
-                                        target='getAccountInfo')
-        self.logger.debug('Trying to check email with payload "%s"', payload)
-        response = self.session.post(self.url, json=payload)
+        self.logger.debug('Trying to check email "%s"', email)
+        response = self.call('GetAccountInfo', {'AccountEmail': email})
         if not response.ok:
             self.logger.error('Failed to check for email with response status '
                               '"%s" and response text "%s"',
@@ -1183,18 +1184,11 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         return regions
 
     def _create_system_role(self, parameters):
-        default_params = {'Action': 'CreateServiceRole',
-                          'ContentType': 'JSON',
-                          'ServicePrincipalName': 'controltower.amazonaws.com',
+        default_params = {'ServicePrincipalName': 'controltower.amazonaws.com',
                           'TemplateVersion': 1}
         default_params.update(parameters)
-        payload = {'headers': {'Content-Type': 'application/x-amz-json-1.1'},
-                   'method': 'GET',
-                   'params': default_params,
-                   'path': '/',
-                   'region': 'us-east-1'}
-        self.logger.debug('Trying to system role with payload "%s"', payload)
-        response = self.session.post(self._iam_admin_url, json=payload)
+        self.logger.debug('Trying to system role with parameters "%s"', default_params)
+        response = self._call_iam_admin(method='CreateServiceRole', data=default_params)
         try:
             if all([not response.ok,
                     response.status_code == 409,
@@ -1295,20 +1289,21 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                      'OrganizationalUnitType': 'CUSTOM'}]
         configuration = {'OrganizationStructure': accounts,
                          'RegionConfigurationList': region_list}
-        payload = self._get_api_payload(content_string={'Configuration': configuration,
-                                                        'HomeRegion': self.region,
-                                                        'LogAccountEmail': logging_account_email,
-                                                        'SecurityAccountEmail': security_account_email,
-                                                        'RegionConfigurationList': region_list,
-                                                        'SetupLandingZoneActionType': 'CREATE'},
-                                        target='setupLandingZone')
+        payload = {'Configuration': configuration,
+                   'HomeRegion': self.region,
+                   'LogAccountEmail': logging_account_email,
+                   'SecurityAccountEmail': security_account_email,
+                   'RegionConfigurationList': region_list,
+                   'SetupLandingZoneActionType': 'CREATE'
+                   }
+
         self.logger.debug('Trying to deploy control tower with payload "%s"', payload)
         return self._deploy(payload, retries, wait)
 
     def _deploy(self, payload: dict, retries: int = 10, wait: int = 1) -> bool:
         succeeded = False
         while retries:
-            response = self.session.post(self.url, json=payload)
+            response = self.call("SetupLandingZone", payload)
             succeeded = response.ok
             retries -= 1
             if response.ok:
@@ -1378,11 +1373,10 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         security_account = next((account for account in self.core_accounts if account.label == 'SECURITY'), None)
         if not security_account:
             raise ServiceCallFailed('Could not retrieve security account to get the email.')
-        payload = self._get_api_payload(content_string={'HomeRegion': self.region,
-                                                        'LogAccountEmail': log_account.email,
-                                                        'SecurityAccountEmail': security_account.email,
-                                                        'RegionConfigurationList': region_list,
-                                                        'SetupLandingZoneActionType': 'REPAIR'},
-                                        target='setupLandingZone')
+        payload = {'HomeRegion': self.region,
+                   'LogAccountEmail': log_account.email,
+                   'SecurityAccountEmail': security_account.email,
+                   'RegionConfigurationList': region_list,
+                   'SetupLandingZoneActionType': 'REPAIR'}
         self.logger.debug('Trying to repair control tower with payload "%s"', payload)
         return self._deploy(payload)
