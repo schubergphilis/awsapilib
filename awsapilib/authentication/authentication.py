@@ -170,6 +170,16 @@ class Urls:
         """
         return f'{self.regional_console}home?region={self.region}#'
 
+    @property
+    def global_billing_home(self):
+        """The url of the global billing console.
+
+        Returns:
+            global_billing (str): The url of the global billing console.
+
+        """
+        return f'{self.scheme}us-east-1.console.{self.root_domain}/billing/home'
+
 
 class LoggerMixin:  # pylint: disable=too-few-public-methods
     """Logger."""
@@ -509,33 +519,39 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
 
         """
         service = 'billing'
-        url = f'{self.urls.console}/{service}/home?region={self.region}'
         self._get_response(self.get_signed_url())
-        host = urllib.parse.urlparse(url)[1]
-        self.logger.debug('Setting host to: %s', host)
-        self._get_response(url, extra_cookies=[FilterCookie('JSESSIONID', f'/{service}'),
-                                               FilterCookie('aws-userInfo-signed', )])
-        hash_args = self._get_response(url,
-                                       params={'state': 'hashArgs#'},
-                                       extra_cookies=[FilterCookie('JSESSIONID', f'/{service}'),
-                                                      FilterCookie('aws-userInfo-signed', ),
-                                                      FilterCookie('aws-creds-code-verifier', f'/{service}')])
-        oauth = self._get_response(hash_args.headers.get('Location'),
+
+        billing_response = self._get_response(self.urls.global_billing_home,
+                                              params={
+                                                  'state': 'hashArgs#',
+                                                  'skipRegion': 'true',
+                                                  'region': 'us-east-1'
+                                              },
+                                              extra_cookies=[FilterCookie('aws-userInfo-signed', ),
+                                                             FilterCookie('aws-creds-code-verifier', f'/{service}')
+                                                             ])
+
+        oauth = self._get_response(billing_response.headers.get('Location'),
                                    extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
-                                                  FilterCookie('aws-userInfo-signed', )])
+                                                  FilterCookie('aws-userInfo-signed', ),
+                                                  FilterCookie('aws-signin-account-info', )
+                                                  ])
+
         oauth_challenge = self._get_response(oauth.headers.get('Location'),
-                                             extra_cookies=[FilterCookie('JSESSIONID', self.urls.regional_console),
-                                                            FilterCookie('aws-userInfo-signed', ),
+                                             extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                             FilterCookie('aws-creds-code-verifier', f'/{service}')
                                                             ])
+
         dashboard = self._get_response(oauth_challenge.headers.get('Location'),
-                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
-                                                      FilterCookie('JSESSIONID', host)])
+                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}')])
+
         csrf_token_data = CsrfTokenData(entity_type='input',
                                         attributes={'id': 'xsrfToken'},
                                         attribute_value='value',
                                         headers_name='x-awsbc-xsrf-token')
-        extra_cookies = [FilterCookie('aws-creds', f'/{service}')]
+        extra_cookies = [FilterCookie('aws-creds', f'/{service}'),
+                         FilterCookie('aws-signin-csrf', '/signin'),
+                         ]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
     def get_cloudformation_authenticated_session(self):
