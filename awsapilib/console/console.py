@@ -462,12 +462,11 @@ class BaseConsoleInterface(LoggerMixin):
         parameters = self._update_parameters_with_captcha(parameters, response)
         return session_.post(self._signin_url, data=parameters)
 
-    def get_mfa_type(self, email, redirect_url_for_mfa):
+    def get_mfa_type(self, email):
         """Gets the MFA type of the account.
 
         Args:
             email: The email of the account to check for MFA settings.
-            redirect_url_for_mfa: The redirect URL for MFA.
 
         Returns:
             The type of MFA set (only "SW" currently supported) None if no MFA is set.
@@ -476,7 +475,11 @@ class BaseConsoleInterface(LoggerMixin):
         url = f'{Urls.sign_in}/mfa'
         payload = {'email': email,
                    'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin'),
-                   'redirect_uri': redirect_url_for_mfa
+                   'redirect_uri': f'{Urls.console_home}?'
+                                   f'fromtb=true&'
+                                   f'hashArgs=%23&'
+                                   f'isauthcode=true&'
+                                   f'state=hashArgsFromTB_us-east-1_4d16544228963f5b'
                    }
         response = self.session.post(url, data=payload)
         if not response.ok:
@@ -502,7 +505,7 @@ class BaseConsoleInterface(LoggerMixin):
                 response.json().get('properties', {}).get('captchaStatusToken') is None]):
             raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
                                          f'with status code: {response.status_code}')
-        mfa_type = self.get_mfa_type(email, oidc.redirect_url)
+        mfa_type = self.get_mfa_type(email)
         if mfa_type:
             if not mfa_serial:
                 raise NoMFAProvided(f'Account with email "{email}" is protected by mfa type "{mfa_type}" but no serial '
