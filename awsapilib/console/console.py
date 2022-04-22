@@ -173,11 +173,10 @@ class RootAuthenticator(BaseAuthenticator):
         if not self._get_console_root_session(redirect_url):
             raise InvalidAuthentication('Unable to get a valid authenticated session for root console.')
         service = 'billing'
-        url = self.urls.billing_home
 
-        _ = self._get_response(url)
+        _ = self._get_response(self.urls.billing_home)
 
-        hash_args = self._get_response(url,
+        hash_args = self._get_response(self.urls.billing_home,
                                        params={'state': 'hashArgs#'},
                                        extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                       FilterCookie('aws-creds-code-verifier', f'/{service}')])
