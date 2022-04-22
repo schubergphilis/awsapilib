@@ -223,9 +223,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         if self._core_accounts is None:
             core_accounts = []
             for account_type in self.core_account_types:
-                payload = self._get_api_payload(content_string={'AccountType': account_type},
-                                                target='describeCoreService')
-                response = self.session.post(self.url, json=payload)
+                payload = {'AccountType': account_type}
+                response = self.call('DescribeCoreService', payload)
                 if not response.ok:
                     raise ServiceCallFailed(f'Service call failed with payload {payload}')
                 core_accounts.append(CoreAccount(self, account_type, response.json()))
@@ -1335,10 +1334,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             response (bool): True if the process starts successfully, False otherwise.
 
         """
-        payload = self._get_api_payload(content_string={},
-                                        target='deleteLandingZone',
-                                        region=self.region)
-        response = self.session.post(self.url, json=payload)
+        response = self.call('DeleteLandingZone')
         if not response.ok:
             self.logger.error('Failed to decommission control tower with response status "%s" and response text "%s"',
                               response.status_code, response.text)
