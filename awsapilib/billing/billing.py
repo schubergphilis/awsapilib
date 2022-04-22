@@ -175,14 +175,6 @@ class Preferences(LoggerMixin):
         return f'{self._billing.rest_api}/preferences'
 
     @property
-    def _values(self):
-        response = self._billing.session.get(self._preferences_endpoint)
-        if not response.ok:
-            self.logger.error(f'Failed to retrieve inheritance state, response: {response.text}')
-            return {}
-        return response.json()
-
-    @property
     def pdf_invoice_by_mail(self):
         """The setting of the pdf invoice by email.
 
@@ -190,10 +182,11 @@ class Preferences(LoggerMixin):
             setting (bool): True if set, False otherwise.
 
         """
-        values = self._values
-        if not values:
-            raise SystemError('Could not retrieve the preferences!')
-        return values.get('pdfInvoiceByEmail') == 'Y'
+        endpoint = f'{self._preferences_endpoint}/invoice'
+        response = self._billing.session.get(endpoint)
+        if not response.ok:
+            raise SystemError('Could not retrieve the pdf invoice by mail preferences!')
+        return response.json().get('pdfInvoiceByEmail') == 'Y'
 
     @pdf_invoice_by_mail.setter
     def pdf_invoice_by_mail(self, value: bool):
@@ -206,7 +199,8 @@ class Preferences(LoggerMixin):
         if self.pdf_invoice_by_mail == value:
             return
         payload = {'pdfInvoiceByEmail': 'Y' if value else 'N'}
-        response = self._billing.session.put(self._preferences_endpoint, json=payload)
+        endpoint = f'{self._preferences_endpoint}/invoice'
+        response = self._billing.session.put(endpoint, json=payload)
         if not response.ok:
             self.logger.error(f'Failed to retrieve inheritance state, response: {response.text}')
 
