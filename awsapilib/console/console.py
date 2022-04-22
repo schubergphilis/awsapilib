@@ -185,14 +185,13 @@ class RootAuthenticator(BaseAuthenticator):
                                extra_cookies=[
                                    FilterCookie('aws-userInfo-signed', )])
 
-        regional_url = f'{self.urls.scheme}us-east-1.console.{self.urls.root_domain}/billing/home'
-        regional_response = self._get_response(regional_url,
+        billing_response = self._get_response(self.urls.global_billing,
                                                params={'state': 'hashArgs#', 'skipRegion': 'true',
                                                        'region': 'us-east-1'},
                                                extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                               FilterCookie('aws-creds-code-verifier', f'/{service}')])
 
-        oauth = self._get_response(regional_response.headers.get('Location'),
+        oauth = self._get_response(billing_response.headers.get('Location'),
                                    extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
                                                   FilterCookie('aws-userInfo-signed', ),
                                                   FilterCookie('aws-signin-account-info', )])

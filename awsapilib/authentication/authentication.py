@@ -170,6 +170,16 @@ class Urls:
         """
         return f'{self.regional_console}home?region={self.region}#'
 
+    @property
+    def global_billing(self):
+        """The url of the global billing console.
+
+        Returns:
+            global_billing (str): The url of the global billing console.
+
+        """
+        return f'{self.scheme}us-east-1.console.{self.root_domain}/billing/home'
+
 
 class LoggerMixin:  # pylint: disable=too-few-public-methods
     """Logger."""
@@ -511,8 +521,7 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
         service = 'billing'
         self._get_response(self.get_signed_url())
 
-        regional_url = f'{self.urls.scheme}us-east-1.console.{self.urls.root_domain}/billing/home'
-        regional_response = self._get_response(regional_url,
+        billing_response = self._get_response(self.urls.global_billing,
                                                params={
                                                    'state': 'hashArgs#',
                                                    'skipRegion': 'true',
@@ -522,7 +531,7 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
                                                               FilterCookie('aws-creds-code-verifier', f'/{service}')
                                                               ])
 
-        oauth = self._get_response(regional_response.headers.get('Location'),
+        oauth = self._get_response(billing_response.headers.get('Location'),
                                    extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
                                                   FilterCookie('aws-userInfo-signed', ),
                                                   FilterCookie('aws-signin-account-info', )
