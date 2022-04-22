@@ -184,7 +184,7 @@ class RootAuthenticator(BaseAuthenticator):
                                extra_cookies=[
                                    FilterCookie('aws-userInfo-signed', )])
 
-        billing_response = self._get_response(self.urls.global_billing,
+        billing_response = self._get_response(self.urls.global_billing_home,
                                               params={'state': 'hashArgs#', 'skipRegion': 'true',
                                                       'region': 'us-east-1'},
                                               extra_cookies=[FilterCookie('aws-userInfo-signed', ),

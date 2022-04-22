@@ -171,7 +171,7 @@ class Urls:
         return f'{self.regional_console}home?region={self.region}#'
 
     @property
-    def global_billing(self):
+    def global_billing_home(self):
         """The url of the global billing console.
 
         Returns:
@@ -521,7 +521,7 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
         service = 'billing'
         self._get_response(self.get_signed_url())
 
-        billing_response = self._get_response(self.urls.global_billing,
+        billing_response = self._get_response(self.urls.global_billing_home,
                                               params={
                                                   'state': 'hashArgs#',
                                                   'skipRegion': 'true',
