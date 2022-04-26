@@ -175,3 +175,9 @@ History
 ------------------
 
 * Updated 'get_changing_accounts' to use the search_provisioned_products with a filter which will fix the bug where only the first 100 provisioned products were checked for status "UNDER_CHAGE".
+
+
+2.2.0 (26-04-2022)
+------------------
+
+* Fix for new console authentication flow courtesy of Soenke Ruempler <soenke+github@ruempler.eu>, author of the awesome superwerker!
