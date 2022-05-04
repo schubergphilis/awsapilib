@@ -182,10 +182,10 @@ class Urls:
 
     @property
     def global_iam_home(self):
-        """The url of the global billing console.
+        """The url of the global IAM console.
 
         Returns:
-            global_billing (str): The url of the global billing console.
+            global_iam_home (str): The url of the global IAM console.
 
         """
         return f'{self.scheme}us-east-1.console.{self.root_domain}/iam/home'
