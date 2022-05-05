@@ -180,6 +180,16 @@ class Urls:
         """
         return f'{self.scheme}us-east-1.console.{self.root_domain}/billing/home'
 
+    @property
+    def global_iam_home(self):
+        """The url of the global IAM console.
+
+        Returns:
+            global_iam_home (str): The url of the global IAM console.
+
+        """
+        return f'{self.scheme}us-east-1.console.{self.root_domain}/iam/home'
+
 
 class LoggerMixin:  # pylint: disable=too-few-public-methods
     """Logger."""

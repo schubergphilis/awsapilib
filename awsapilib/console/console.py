@@ -230,40 +230,38 @@ class RootAuthenticator(BaseAuthenticator):
         _ = self._session.get(url)
         hash_args = self._get_response(url,
                                        params={'state': 'hashArgs#'},
-                                       extra_cookies=[FilterCookie('cfn_sessid', ),
-                                                      FilterCookie('awsccc', ),
-                                                      FilterCookie('aws-csds-token', ),
+                                       extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                       FilterCookie('aws-creds-code-verifier', f'/{service}')])
-        oauth = self._get_response(hash_args.headers.get('Location'),
+        _ = self._get_response(hash_args.headers.get('Location'),
+                               extra_cookies=[
+                                   FilterCookie('aws-userInfo-signed', )])
+
+        regional_response = self._get_response(self.urls.global_iam_home,
+                                               params={'state': 'hashArgs#', 'skipRegion': 'true',
+                                                       'region': 'us-east-1'},
+                                               extra_cookies=[FilterCookie('aws-userInfo-signed', ),
+                                                              FilterCookie('aws-creds-code-verifier', f'/{service}')])
+
+        oauth = self._get_response(regional_response.headers.get('Location'),
                                    extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
-                                                  FilterCookie('cfn_sessid', ),
                                                   FilterCookie('aws-userInfo-signed', ),
-                                                  FilterCookie('aws-csds-token', ),
-                                                  FilterCookie('aws-creds', f'/{service}'),
-                                                  FilterCookie('JSESSIONID', ),
-                                                  FilterCookie('aws-userInfo-signed', )])
+                                                  FilterCookie('aws-signin-account-info', )])
+
         oauth_challenge = self._get_response(oauth.headers.get('Location'),
-                                             extra_cookies=[FilterCookie('JSESSIONID',),
-                                                            FilterCookie('awsccc', ),
-                                                            FilterCookie('aws-csds-token', ),
-                                                            FilterCookie('cfn_sessid', ),
-                                                            FilterCookie('aws-userInfo-signed', ),
+                                             extra_cookies=[FilterCookie('aws-userInfo-signed', ),
                                                             FilterCookie('aws-creds-code-verifier', f'/{service}')
                                                             ])
+
         dashboard = self._get_response(oauth_challenge.headers.get('Location'),
-                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}'),
-                                                      FilterCookie('aws-creds-code-verifier', f'/{service}'),
-                                                      FilterCookie('cfn_sessid', ),
-                                                      FilterCookie('awsccc', ),
-                                                      FilterCookie('aws-userInfo-signed', ),
-                                                      FilterCookie('aws-consoleInfo', )])
+                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}')])
+
         csrf_token_data = CsrfTokenData(entity_type='meta',
                                         attributes={'id': 'xsrf-token'},
                                         attribute_value='data-token',
                                         headers_name='X-CSRF-TOKEN')
         extra_cookies = [FilterCookie('aws-creds', f'/{service}'),
-                         FilterCookie('aws-creds-code-verifier', f'/{service}'),
-                         FilterCookie('aws-consoleInfo', )]
+                         FilterCookie('aws-signin-csrf', '/signin'),
+                         ]
         return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
 
