@@ -181,3 +181,9 @@ History
 ------------------
 
 * Fix for new console authentication flow courtesy of Soenke Ruempler <soenke+github@ruempler.eu>, author of the awesome superwerker!
+
+
+2.3.0 (05-05-2022)
+------------------
+
+* Fix for IAM authentication flow.
