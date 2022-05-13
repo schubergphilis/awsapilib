@@ -456,6 +456,9 @@ class BaseConsoleInterface(LoggerMixin):
                       'email': email,
                       'csrf': session_.cookies.get('aws-signin-csrf', path='/signin')}
         response = session_.post(self._signin_url, data=parameters)
+        if response.json().get('properties', {}).get('CaptchaURL') is None:
+            self.logger.debug('No Captcha information found.')
+            return response
         self.logger.debug('Getting the resolve account type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
         return session_.post(self._signin_url, data=parameters)
@@ -500,7 +503,8 @@ class BaseConsoleInterface(LoggerMixin):
         oidc = self._get_oidc_info(response.history[0].headers.get('Location'))
         response = self._resolve_account_type_response(email, session=session)
         if any([not response.ok,
-                response.json().get('properties', {}).get('captchaStatusToken') is None]):
+                all([response.json().get('properties', {}).get('CaptchaURL') is not None,
+                     response.json().get('properties', {}).get('captchaStatusToken') is None])]):
             raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
                                          f'with status code: {response.status_code}')
         mfa_type = self.get_mfa_type(email)
@@ -511,7 +515,6 @@ class BaseConsoleInterface(LoggerMixin):
             if not mfa_type == 'SW':
                 raise UnsupportedMFA('Currently on SW mfa type is supported.')
         parameters = {'action': 'authenticateRoot',
-                      'captcha_status_token': response.json().get('properties', {}).get('captchaStatusToken'),
                       'client_id': oidc.client_id,
                       'code_challenge_method': oidc.code_challenge_method,
                       'code_challenge': oidc.code_challenge,
@@ -520,6 +523,10 @@ class BaseConsoleInterface(LoggerMixin):
                       'password': password,
                       'redirect_uri': oidc.redirect_url,
                       'csrf': session.cookies.get('aws-signin-csrf', path='/signin')}
+
+        if response.json().get('properties', {}).get('CaptchaURL') is not None:
+            parameters['captcha_status_token'] = response.json().get('properties', {}).get('captchaStatusToken')
+
         if mfa_type:
             totp = TOTP(mfa_serial)
             parameters.update({'mfaType': mfa_type,
