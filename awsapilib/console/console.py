@@ -402,7 +402,6 @@ class BaseConsoleInterface(LoggerMixin):
         self._signin_url = f'{Urls.sign_in}/signin'
         self._reset_url = f'{Urls.sign_in}/resetpassword'
         self._update_url = f'{Urls.sign_in}/updateaccount'
-        self._captcha_required = True
 
     @staticmethod
     def _get_captcha_info(response):
@@ -459,7 +458,6 @@ class BaseConsoleInterface(LoggerMixin):
         response = session_.post(self._signin_url, data=parameters)
         if response.json().get('properties', {}).get('CaptchaURL') is None:
             self.logger.debug('No Captcha information found.')
-            self._captcha_required = False
             return response
         self.logger.debug('Getting the resolve account type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
@@ -504,9 +502,12 @@ class BaseConsoleInterface(LoggerMixin):
                               f'with status code: {response.status_code}')
         oidc = self._get_oidc_info(response.history[0].headers.get('Location'))
         response = self._resolve_account_type_response(email, session=session)
+        captcha_url = response.json().get('properties', {}).get('CaptchaURL')
+        captcha_status_token = response.json().get('properties', {}).get('captchaStatusToken')
+
         if any([not response.ok,
-                all([self._captcha_required,
-                     response.json().get('properties', {}).get('captchaStatusToken') is None])]):
+                all([captcha_url is not None,
+                     captcha_status_token is None])]):
             raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
                                          f'with status code: {response.status_code}')
         mfa_type = self.get_mfa_type(email)
@@ -526,8 +527,8 @@ class BaseConsoleInterface(LoggerMixin):
                       'redirect_uri': oidc.redirect_url,
                       'csrf': session.cookies.get('aws-signin-csrf', path='/signin')}
 
-        if self._captcha_required:
-            parameters['captcha_status_token'] = response.json().get('properties', {}).get('captchaStatusToken')
+        if captcha_url is not None:
+            parameters['captcha_status_token'] = captcha_status_token
 
         if mfa_type:
             totp = TOTP(mfa_serial)
