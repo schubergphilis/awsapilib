@@ -187,3 +187,9 @@ History
 ------------------
 
 * Fix for IAM authentication flow.
+
+
+2.3.1 (18-05-2022)
+------------------
+
+* Fix for cases where captcha is actually not required.
