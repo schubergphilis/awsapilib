@@ -61,7 +61,7 @@ To use Account Manager in a project:
     arn:aws:iam::ACCOUNTID:mfa/root-account-mfa-device
 
     # Delete a virtual MFA
-    account_manager.mfa.delete_virtual_mfa(device.serial_number)
+    account_manager.mfa.delete_virtual_device(device.serial_number)
 
 
     # Update info and terminate account
