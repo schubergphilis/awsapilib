@@ -546,6 +546,7 @@ class BaseConsoleInterface(LoggerMixin):
         if all([success,
                 response.json().get('properties', {}).get('CaptchaURL') is not None]):
             response = self._process_after_captcha(parameters, response, session)
+            success = self._validate_response(response)
 
         if not all([success,
                     response.json().get('properties').get('RedirectTo') is not None]):
