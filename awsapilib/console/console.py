@@ -489,6 +489,13 @@ class BaseConsoleInterface(LoggerMixin):
         mfa_type = response.json().get('mfaType')
         return None if mfa_type == 'NONE' else mfa_type
 
+    def _process_after_captcha(self, parameters, response, session=None):
+        session_ = session if session else self.session
+
+        self.logger.debug('Getting the after login type captcha.')
+        parameters = self._update_parameters_with_captcha(parameters, response)
+        return session_.post(self._signin_url, data=parameters)
+
     def _get_root_console_redirect(self, email, password, session, mfa_serial=None):
 
         urls = Urls('us-east-1')
@@ -536,6 +543,10 @@ class BaseConsoleInterface(LoggerMixin):
                                'mfa1': totp.now()})
         response = session.post(self._signin_url, data=parameters)
         success = self._validate_response(response)
+        if all([success,
+                response.json().get('properties', {}).get('CaptchaURL') is not None]):
+            response = self._process_after_captcha(parameters, response, session)
+
         if not all([success,
                     response.json().get('properties').get('RedirectTo') is not None]):
             raise InvalidAuthentication(f'Unable to authenticate, response received was: {response.text} '
