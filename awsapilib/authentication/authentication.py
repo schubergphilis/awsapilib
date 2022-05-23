@@ -450,9 +450,10 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
         self._get_response(url,
                            params={'region': self.region},
                            extra_cookies=[FilterCookie('JSESSIONID'),
-                                          FilterCookie('aws-userInfo-signed')])
+                                          FilterCookie('aws-userInfo-signed'),
+                                          FilterCookie('aws-creds-code-verifier', self.urls.regional_console)])
         hash_args = self._get_response(url,
-                                       params={'state': 'hashArgs#'},
+                                       params={'hashArgs': '#'},
                                        extra_cookies=[FilterCookie('JSESSIONID', self.urls.regional_console),
                                                       FilterCookie('aws-userInfo-signed',),
                                                       FilterCookie('aws-creds-code-verifier', self.urls.regional_console
@@ -478,12 +479,15 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
                                                       FilterCookie('aws-consoleInfo'),
                                                       FilterCookie('aws-userInfo-signed')])
         csrf_token_data = CsrfTokenData(entity_type='meta',
-                                        attributes={'name': 'awsc-csrf-token'},
+                                        attributes={'name': 'tb-data'},
                                         attribute_value='content',
-                                        headers_name='X-CSRF-TOKEN')
+                                        headers_name='x-csrf-token')
         extra_cookies = [FilterCookie('JSESSIONID', self.domains.regional_console),
                          FilterCookie('aws-creds', f'{self.domains.regional_console}/{service}')]
-        return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
+        return self._get_session_from_console(dashboard,
+                                              csrf_token_data,
+                                              extra_cookies,
+                                              token_transform=lambda x: json.loads(x).get('csrfToken'))
 
     def get_sso_authenticated_session(self):
         """Authenticates to Single Sign On and returns an authenticated session.
