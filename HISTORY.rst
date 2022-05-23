@@ -193,3 +193,9 @@ History
 ------------------
 
 * Fix for cases where captcha is actually not required.
+
+
+2.3.2 (23-05-2022)
+------------------
+
+* Another captcha fix for the root console curtesy of Rafael Zamana Kineippe <rafael@zamana.com.br>
