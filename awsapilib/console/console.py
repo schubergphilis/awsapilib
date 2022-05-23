@@ -489,9 +489,8 @@ class BaseConsoleInterface(LoggerMixin):
         mfa_type = response.json().get('mfaType')
         return None if mfa_type == 'NONE' else mfa_type
 
-    def _process_after_captcha(self, parameters, response, session=None):
+    def _process_after_login_captcha(self, parameters, response, session=None):
         session_ = session if session else self.session
-
         self.logger.debug('Getting the after login type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
         return session_.post(self._signin_url, data=parameters)
@@ -545,7 +544,7 @@ class BaseConsoleInterface(LoggerMixin):
         success = self._validate_response(response)
         if all([success,
                 response.json().get('properties', {}).get('CaptchaURL') is not None]):
-            response = self._process_after_captcha(parameters, response, session)
+            response = self._process_after_login_captcha(parameters, response, session)
             success = self._validate_response(response)
 
         if not all([success,
