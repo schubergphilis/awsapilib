@@ -435,7 +435,6 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
                   'SigninToken': self._get_signin_token()}
         return f'{self.urls.federation}?{urllib.parse.urlencode(params)}'
 
-
     def get_sso_authenticated_session(self):
         """Authenticates to Single Sign On and returns an authenticated session.
 

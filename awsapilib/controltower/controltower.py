@@ -97,29 +97,28 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
     api_content_type = 'application/x-amz-json-1.1'
     api_user_agent = 'aws-sdk-js/2.528.0 promise'
-    supported_targets = ['listManagedOrganizationalUnits',
-                         'manageOrganizationalUnit',
-                         'deregisterOrganizationalUnit',
-                         'listManagedAccounts',
-                         'getGuardrailComplianceStatus',
-                         'describeManagedOrganizationalUnit',
-                         'listGuardrailsForTarget',
-                         'getAvailableUpdates',
-                         'describeCoreService',
-                         'getAccountInfo',
-                         'listEnabledGuardrails',
-                         'listGuardrails',
-                         'listOrganizationalUnitsForParent',
-                         'listDriftDetails',
-                         'getLandingZoneStatus',
-                         'setupLandingZone',
-                         'getHomeRegion',
-                         'listGuardrailViolations',
-                         'getCatastrophicDrift',
-                         'getGuardrailComplianceStatus',
-                         'describeAccountFactoryConfig',
-                         'performPreLaunchChecks',
-                         'deleteLandingZone',
+    supported_targets = ['ListManagedOrganizationalUnits',
+                         'ManageOrganizationalUnit',
+                         'DeregisterOrganizationalUnit',
+                         'ListManagedAccounts',
+                         'DescribeManagedOrganizationalUnit',
+                         'ListGuardrailsForTarget',
+                         'GetAvailableUpdates',
+                         'DescribeCoreService',
+                         'GetAccountInfo',
+                         'ListEnabledGuardrails',
+                         'ListGuardrails',
+                         'ListOrganizationalUnitsForParent',
+                         'ListDriftDetails',
+                         'GetLandingZoneStatus',
+                         'SetupLandingZone',
+                         'GetHomeRegion',
+                         'ListGuardrailViolations',
+                         'GetCatastrophicDrift',
+                         'GetGuardrailComplianceStatus',
+                         'DescribeAccountFactoryConfig',
+                         'PerformPreLaunchChecks',
+                         'DeleteLandingZone',
                          ]
     core_account_types = ['PRIMARY', 'LOGGING', 'SECURITY']
 
@@ -149,7 +148,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
         self._region = region
         self._is_deployed = None
-
+        self.host = f'prod.{self.aws_authenticator.region}.blackbeard.aws.a2z.com'
         self._account_factory_ = None
         self.settling_time = settling_time
         self._root_ou = None
@@ -175,7 +174,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 self.logger.error('Failed to get the deployed status of the landing zone with response status '
                                   '"%s" and response text "%s"',
                                   response.status_code, response.text)
-                raise ServiceCallFailed(payload)
+                raise ServiceCallFailed(response.text)
             not_deployed_states = ('NOT_STARTED', 'DELETE_COMPLETED', 'DELETE_FAILED')
             self._is_deployed = response.json().get('LandingZoneStatus') not in not_deployed_states
         return self._is_deployed
@@ -187,10 +186,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             self._region = self.aws_authenticator.region
             return self._region
         if self._region is None:
-            caller_region = self.aws_authenticator.region
             response = self._call('GetHomeRegion')
             if not response.ok:
-                raise ServiceCallFailed(payload)
+                raise ServiceCallFailed(response.text)
             self._region = response.json().get('HomeRegion') or self.aws_authenticator.region
         return self._region
 
@@ -244,14 +242,15 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             self._root_ou = self.get_organizational_unit_by_name('Root')
         return self._root_ou
 
-
-    def _call(self, method, data = {}):
-        host = f"prod.{self.aws_authenticator.region}.blackbeard.aws.a2z.com"
-        url = f"https://{host}/"
+    def _call(self, method, data=None):
+        data = data if data else {}
+        method = self._validate_target(method)
+        url = f"https://{self.host}/"
         data_encoded = json.dumps(data)
         headers = {
             'Content-Type': 'application/x-amz-json-1.1',
             'X-Amz-Target': f'AWSBlackbeardService.{method}',
+            'Host': self.host
         }
         request = AWSRequest(method="POST", url=url, data=data_encoded, headers=headers)
         session = self.aws_authenticator.session_credentials
@@ -259,10 +258,22 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         SigV4Auth(creds, "controltower", self.aws_authenticator.region).add_auth(request)
         return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded)
 
-    def _call_iam_admin(self, method, data = {}):
-        return self._call_aws_api(endpoint = "iamadmin.amazonaws.com", service="AWSIdentityManagementAdminService", sigv4_service_name="iamadmin", method=method, data=data, amazon_json_version="1.0")
+    def _call_iam_admin(self, method, data=None):
+        data = data if data else {}
+        return self._call_aws_api(endpoint="iamadmin.amazonaws.com",
+                                  service="AWSIdentityManagementAdminService",
+                                  sigv4_service_name="iamadmin",
+                                  method=method,
+                                  data=data,
+                                  amazon_json_version="1.0")
 
-    def _call_aws_api(self, endpoint, service, sigv4_service_name, method, data, amazon_json_version):
+    def _call_aws_api(self,  # pylint: disable=too-many-arguments
+                      endpoint,
+                      service,
+                      sigv4_service_name,
+                      method,
+                      data,
+                      amazon_json_version):
         url = f"https://{endpoint}/"
         data_encoded = json.dumps(data)
         headers = {
@@ -275,7 +286,6 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         creds = ReadOnlyCredentials(session['sessionId'], session['sessionKey'], session['sessionToken'])
         SigV4Auth(creds, sigv4_service_name, {self.aws_authenticator.region}).add_auth(request)
         return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded)
-
 
     @property
     def active_artifact_id(self) -> str:
@@ -319,12 +329,9 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                target,
                                object_group=None,
                                object_type=None,
-                               method='POST',
-                               params=None,
-                               path=None,
-                               region=None,
                                next_token_marker='NextToken'):
-        response, next_token = self._get_partial_response(target, content_payload, next_token_marker)
+        payload = copy.deepcopy(content_payload)
+        response, next_token = self._get_partial_response(target, payload, next_token_marker)
         if not object_group:
             yield response.json()
         else:
@@ -334,9 +341,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                 else:
                     yield data
         while next_token:
-            content_string = copy.deepcopy(json.loads(payload.get('contentString')))
-            content_string.update({next_token_marker: next_token})
-            payload.update({'contentString': json.dumps(content_string)})
+            payload.update({next_token_marker: next_token})
             response, next_token = self._get_partial_response(target, payload, next_token_marker)
             if not object_group:
                 yield response.json()
@@ -353,7 +358,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             self.logger.debug('Failed getting partial response with payload :%s\n', payload)
             self.logger.debug('Response received :%s\n', response.content)
             raise ValueError(response.text)
-        next_token = response.json().get(next_token_marker)
+        next_token = response.json().get(next_token_marker, '')
         return response, next_token
 
     @property
@@ -407,7 +412,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             control.
 
         """
-        return self._get_paginated_results(content_payload={'MaxResults': 20},
+        return self._get_paginated_results(content_payload={'MaxResults': 100},
                                            target='ListManagedOrganizationalUnits',
                                            object_type=ControlTowerOU,
                                            object_group='ManagedOrganizationalUnitList',
@@ -743,7 +748,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             accounts (Account): A list of account objects under control tower's control.
 
         """
-        return self._get_paginated_results(content_payload={},
+        return self._get_paginated_results(content_payload={'MaxResults': 100},
                                            target='ListManagedAccounts',
                                            object_type=ControlTowerAccount,
                                            object_group='ManagedAccountList',
