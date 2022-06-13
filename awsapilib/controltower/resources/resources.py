@@ -156,10 +156,10 @@ class GuardRail(LoggerMixin):
     @property
     def compliancy_status(self):
         """Compliancy status."""
-        payload = self.control_tower._get_api_payload(content_string={'GuardrailName': self.name},  # pylint: disable=protected-access
-                                                      target='getGuardrailComplianceStatus')
+        payload = {'GuardrailName': self.name}
         self.logger.debug('Trying to get the compliancy status with payload "%s"', payload)
-        response = self.control_tower.session.post(self.control_tower.url, json=payload)
+        response = self.control_tower._call('GetGuardrailComplianceStatus',  # pylint: disable=protected-access
+                                            data=payload)
         if not response.ok:
             self.logger.error('Failed to get the drift message of the landing zone with response status "%s" and '
                               'response text "%s"',
@@ -302,9 +302,9 @@ class ControlTowerAccount(LoggerMixin):  # pylint: disable=too-many-public-metho
             status (str): COMPLIANT|NON COMPLIANT
 
         """
-        payload = self.control_tower._get_api_payload(content_string={'AccountId': self.id},  # pylint: disable=protected-access
-                                                      target='getGuardrailComplianceStatus')
-        response = self.control_tower.session.post(self.control_tower.url, json=payload)
+        payload = {'AccountId': self.id}
+        response = self.control_tower._call('GetGuardrailComplianceStatus',  # pylint: disable=protected-access
+                                            data=payload)
         if not response.ok:
             self.logger.error('Failed to get compliancy status from api.')
             return False
@@ -598,9 +598,8 @@ class ControlTowerOU(LoggerMixin):
             response (list): List of Child OUs
 
         """
-        payload = self.control_tower._get_api_payload(content_string={'OrganizationalUnitId': self.id},  # pylint: disable=protected-access
-                                                      target='describeManagedOrganizationalUnit')
-        response = self.control_tower.session.post(self.control_tower.url, json=payload)
+        payload = {'OrganizationalUnitId': self.id}
+        response = self.control_tower._call('DescribeManagedOrganizationalUnit', data=payload)  # pylint: disable=protected-access
         if not response.ok:
             self.logger.error('Failed to get Child OUs')
             return []
