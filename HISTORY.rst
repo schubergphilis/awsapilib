@@ -199,3 +199,9 @@ History
 ------------------
 
 * Another captcha fix for the root console curtesy of Rafael Zamana Kineippe <rafael@zamana.com.br>
+
+
+3.0.0 (13-06-2022)
+------------------
+
+* awsapilib calling aws native apis rather than shadow apis
