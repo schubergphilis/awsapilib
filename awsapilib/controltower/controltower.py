@@ -245,18 +245,14 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     def _call(self, method, data=None):
         data = data if data else {}
         method = self._validate_target(method)
-        url = f"https://{self.host}/"
-        data_encoded = json.dumps(data)
-        headers = {
-            'Content-Type': 'application/x-amz-json-1.1',
-            'X-Amz-Target': f'AWSBlackbeardService.{method}',
-            'Host': self.host
-        }
-        request = AWSRequest(method="POST", url=url, data=data_encoded, headers=headers)
-        session = self.aws_authenticator.session_credentials
-        creds = ReadOnlyCredentials(session['sessionId'], session['sessionKey'], session['sessionToken'])
-        SigV4Auth(creds, "controltower", self.aws_authenticator.region).add_auth(request)
-        return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded)
+
+        return self._call_aws_api(endpoint=self.host,
+                                  service="AWSBlackbeardService",
+                                  sigv4_service_name="controltower",
+                                  method=method,
+                                  data=data,
+                                  amazon_json_version="1.1",
+                                  region=self.aws_authenticator.region)
 
     def _call_iam_admin(self, method, data=None):
         data = data if data else {}
@@ -265,7 +261,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                   sigv4_service_name="iamadmin",
                                   method=method,
                                   data=data,
-                                  amazon_json_version="1.0")
+                                  amazon_json_version="1.0",
+                                  region="us-east-1")
 
     def _call_aws_api(self,  # pylint: disable=too-many-arguments
                       endpoint,
@@ -273,7 +270,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                       sigv4_service_name,
                       method,
                       data,
-                      amazon_json_version):
+                      amazon_json_version,
+                      region):
         url = f"https://{endpoint}/"
         data_encoded = json.dumps(data)
         headers = {
@@ -284,7 +282,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         request = AWSRequest(method="POST", url=url, data=data_encoded, headers=headers)
         session = self.aws_authenticator.session_credentials
         creds = ReadOnlyCredentials(session['sessionId'], session['sessionKey'], session['sessionToken'])
-        SigV4Auth(creds, sigv4_service_name, {self.aws_authenticator.region}).add_auth(request)
+        SigV4Auth(creds, sigv4_service_name, region).add_auth(request)
         return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded)
 
     @property
