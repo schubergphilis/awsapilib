@@ -205,3 +205,9 @@ History
 ------------------
 
 * awsapilib calling aws native apis rather than shadow apis
+
+
+3.1.0 (17-06-2022)
+------------------
+
+* fix control tower deploy/setup 
