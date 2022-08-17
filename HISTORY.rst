@@ -211,3 +211,9 @@ History
 ------------------
 
 * fix control tower deploy/setup 
+
+
+3.1.1 (17-08-2022)
+------------------
+
+* Bumped dependencies.
