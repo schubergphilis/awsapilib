@@ -217,3 +217,9 @@ History
 ------------------
 
 * Bumped dependencies.
+
+
+3.1.2 (27-09-2022)
+------------------
+
+* Fix for support for Control Tower update for versions over 2.6.
