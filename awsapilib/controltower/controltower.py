@@ -1016,7 +1016,12 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         content = {'HomeRegion': self.region,
                    'LogAccountEmail': log_account_email,
                    'SecurityAccountEmail': security_account_email}
-        if self.landing_zone_version == '2.6':
+        try:
+            version = float(self.landing_zone_version)
+        except ValueError:
+            self.logger.error(f'Could not cast to float landing zone version :{self.landing_zone_version}')
+            version = 2.5
+        if version >= 2.6:
             region_list = [{"Region": region,
                             "RegionConfigurationStatus": "ENABLED" if region in self.governed_regions else "DISABLED"}
                            for region in self.get_available_regions()]
