@@ -456,6 +456,7 @@ class BaseConsoleInterface(LoggerMixin):
                       'email': email,
                       'csrf': session_.cookies.get('aws-signin-csrf', path='/signin')}
         response = session_.post(self._signin_url, data=parameters)
+        time.sleep(0.8)
         if response.json().get('properties', {}).get('CaptchaURL') is None:
             self.logger.debug('No Captcha information found.')
             return response
@@ -503,6 +504,7 @@ class BaseConsoleInterface(LoggerMixin):
 
         self.logger.debug(f'Trying to get url: {url} with parameters :{parameters}')
         response = session.get(url, params=parameters)
+        time.sleep(0.8)
         if not response.ok:
             raise ServerError(f'Unsuccessful response received: {response.text} '
                               f'with status code: {response.status_code}')
