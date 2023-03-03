@@ -88,7 +88,7 @@ class Iterm(Solver):
             guess (str): The guess of the user for the captcha.
 
         """
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         if not response.ok:
             raise CaptchaError(response.text)
         image = base64.b64encode(response.content).decode()
@@ -158,7 +158,7 @@ class Captcha2(Solver):
                               'lang': 'en'}
         try:
             self.logger.debug(f'Trying to get captcha image from url : {url}')
-            response = requests.get(url)
+            response = requests.get(url, timeout=5)
             image = base64.b64encode(response.content).decode("utf-8")
             self.logger.debug('Waiting for the solved captcha from 2captcha service.')
             result = self.solver.normal(image, **captcha_parameters)

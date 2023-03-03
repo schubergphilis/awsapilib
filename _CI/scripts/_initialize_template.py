@@ -44,7 +44,7 @@ def initialize_template_environment():
             activate_virtual_environment()
             from emoji import emojize
             LOGGER.info('%s Successfully created virtual environment and loaded it! %s',
-                        emojize(':white_heavy_check_mark:'),
+                        emojize(':check_mark_button:'),
                         emojize(':thumbs_up:'))
         else:
             LOGGER.error('Creation of virtual environment failed, cannot continue, '

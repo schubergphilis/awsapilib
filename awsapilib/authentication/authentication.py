@@ -103,7 +103,7 @@ class Domains:
         return f'{self.region}.console.{self.root}'
 
 
-@dataclass  # pylint: disable=too-many-instance-attributes
+@dataclass
 class Urls:
     """Dataclass holding the urls required for authenticating."""
 
@@ -191,7 +191,7 @@ class Urls:
         return f'{self.scheme}us-east-1.console.{self.root_domain}/iam/home'
 
 
-class LoggerMixin:  # pylint: disable=too-few-public-methods
+class LoggerMixin:
     """Logger."""
 
     @property
@@ -205,7 +205,7 @@ class LoggerMixin:  # pylint: disable=too-few-public-methods
         return logging.getLogger(f'{LOGGER_BASENAME}.{self.__class__.__name__}')
 
 
-class BaseAuthenticator(LoggerMixin):  # pylint: disable=too-few-public-methods
+class BaseAuthenticator(LoggerMixin):
     """Interfaces with aws authentication mechanisms, providing pre signed urls, or authenticated sessions."""
 
     def __init__(self, region=None):
@@ -265,7 +265,8 @@ class BaseAuthenticator(LoggerMixin):  # pylint: disable=too-few-public-methods
         arguments = {'url': url,
                      'headers': headers,
                      'cookies': self._cookies_to_dict(cookies),
-                     'allow_redirects': False}
+                     'allow_redirects': False,
+                     'timeout': 5}
         if params:
             arguments.update({'params': params})
         self.logger.debug('Getting url :%s with arguments : %s', url, arguments)
@@ -276,10 +277,10 @@ class BaseAuthenticator(LoggerMixin):  # pylint: disable=too-few-public-methods
                 error_title = error_response.title.string.strip()
                 err_msg = error_response.find('div', {'id': 'content'}).find('p').string
             except AttributeError:
-                raise ValueError('Response received: %s' % response.text)
+                raise ValueError(f'Response received: {response.text}') from None
             if all([response.status_code == 400, error_title == 'Credentials expired']):
                 raise ExpiredCredentials(response.status_code, err_msg)
-            raise ValueError('Response received: %s' % response.text)
+            raise ValueError(f'Response received: {response.text}') from None
         self._debug_response(response, cookies)
         self._session.cookies.update(response.cookies)
         return response
@@ -323,7 +324,7 @@ class BaseAuthenticator(LoggerMixin):  # pylint: disable=too-few-public-methods
             csrf_token = soup.find(csrf_token_data.entity_type,
                                    csrf_token_data.attributes).attrs.get(csrf_token_data.attribute_value)
         except AttributeError:
-            raise ValueError('Response received: %s' % console_page_response.text)
+            raise ValueError(f'Response received: {console_page_response.text}') from None
         if not csrf_token:
             raise NoSigninTokenReceived('Unable to retrieve csrf token.')
         session = requests.Session()
@@ -337,7 +338,7 @@ class BaseAuthenticator(LoggerMixin):  # pylint: disable=too-few-public-methods
         return session
 
 
-class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-attributes
+class Authenticator(BaseAuthenticator):
     """Interfaces with aws authentication mechanisms, providing pre signed urls, or authenticated sessions."""
 
     def __init__(self, arn, session_duration=3600, region=None):
@@ -362,7 +363,7 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
                                                     RoleSessionName="AssumeRoleSession",
                                                     DurationSeconds=self.session_duration)
         except botocore.exceptions.ParamValidationError as error:
-            raise ValueError('The arn you provided is incorrect: {}'.format(error)) from None
+            raise ValueError(f'The arn you provided is incorrect: {error}') from None
         except (botocore.exceptions.NoCredentialsError, botocore.exceptions.ClientError) as error:
             raise InvalidCredentials(error) from None
 
@@ -405,7 +406,7 @@ class Authenticator(BaseAuthenticator):   # pylint: disable=too-many-instance-at
         params = {'Action': 'getSigninToken',
                   # 'SessionDuration': str(duration),
                   'Session': json.dumps(self.session_credentials)}
-        response = requests.get(self.urls.federation, params=params)
+        response = requests.get(self.urls.federation, params=params, timeout=5)
         if all([response.status_code == 401, response.text == 'Token Expired']):
             try:
                 self._assumed_role = self._get_assumed_role(self.arn)

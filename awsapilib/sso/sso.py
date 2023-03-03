@@ -87,7 +87,7 @@ SUPPORTED_TARGETS = ['GetUserPoolInfo',
                      'ProvisionSAMLProvider']
 
 
-class Sso(LoggerMixin):  # pylint: disable=too-many-public-methods
+class Sso(LoggerMixin):
     """Models AWS SSO."""
 
     API_CONTENT_TYPE = 'application/json; charset=UTF-8'
