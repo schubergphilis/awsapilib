@@ -59,9 +59,10 @@ class HarParser:
     @staticmethod
     def _parse(har_file):
         try:
-            data = json.load(open(har_file, 'r'))
+            with open(har_file, 'r', encoding='utf-8') as ifile:
+                data = json.load(ifile)
         except Exception:
-            raise ValueError(f'Could not read or parse file: {har_file}')
+            raise ValueError(f'Could not read or parse file: {har_file}') from None
         return data
 
     def _get_service_calls(self, service):
@@ -69,7 +70,7 @@ class HarParser:
                  if any(['aws.amazon.com/oauth' in entry['request']['url'],
                          all([f'aws.amazon.com/{service}' in entry['request']['url'],
                               f'aws.amazon.com/{service}/api' not in entry['request']['url']])])]
-        return [] if not any([True for entry in calls if service in entry["request"]["url"]]) else calls
+        return [] if not any(True for entry in calls if service in entry["request"]["url"]) else calls
 
     @staticmethod
     def _get_text_from_calls(calls):

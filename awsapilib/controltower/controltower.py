@@ -92,7 +92,7 @@ __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 
-class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes,too-many-public-methods
+class ControlTower(LoggerMixin):
     """Models Control Tower by wrapping around service catalog."""
 
     api_content_type = 'application/x-amz-json-1.1'
@@ -201,7 +201,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
 
         """
         url = 'https://api.regional-table.region-services.aws.a2z.com/index.json'
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         if not response.ok:
             LOGGER.error('Failed to retrieve the info')
             return []
@@ -283,7 +283,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         session = self.aws_authenticator.session_credentials
         creds = ReadOnlyCredentials(session['sessionId'], session['sessionKey'], session['sessionToken'])
         SigV4Auth(creds, sigv4_service_name, region).add_auth(request)
-        return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded)
+        return requests.request(method="POST", url=url, headers=dict(request.headers), data=data_encoded, timeout=5)
 
     @property
     def active_artifact_id(self) -> str:
@@ -303,7 +303,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             return next((artifact for artifact in artifacts.get('ProvisioningArtifactDetails', [])
                          if artifact.get('Active')))
         except StopIteration:
-            raise NoActiveArtifactRetrieved('Could not retrieve the active artifact from service catalog.')
+            raise NoActiveArtifactRetrieved('Could not retrieve the active artifact from service catalog.') from None
 
     @staticmethod
     def _get_account_factory(service_catalog_client):
@@ -314,7 +314,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                                                                          ).get('ProductViewSummaries', [''])[0])
         except IndexError:
             raise NoServiceCatalogAccess(('Please make sure the role used has access to the "AWS Control Tower Account '
-                                          'Factory Portfolio" in Service Catalog under "Groups, roles, and users"'))
+                                          'Factory Portfolio" in Service Catalog under "Groups, roles, and users"')
+                                         ) from None
 
     def _validate_target(self, target):
         if target not in self.supported_targets:
@@ -525,8 +526,8 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
         # Making sure that eventual consistency is not a problem here,
         # we wait for control tower to be aware of initialising of the process and then we block on it while it runs.
         result = self._describe_organizational_unit(org_ou.parent_ou_id)
-        while not any([all([ou.name == org_ou.name,
-                            ou.status == 'COMPLETED']) for ou in result]):
+        while not any(all([ou.name == org_ou.name,
+                           ou.status == 'COMPLETED']) for ou in result):
             time.sleep(2)
             result = self._describe_organizational_unit(org_ou.parent_ou_id)
             match = next((ou for ou in result if ou.name == org_ou.name), None)
@@ -597,7 +598,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
     @staticmethod
     def _get_ou_by_attribute_pairs(ou_container, attribute_pairs):
         return next((ou for ou in ou_container
-                     if all([getattr(ou, name) == value for name, value in attribute_pairs.items()])), None)
+                     if all(getattr(ou, name) == value for name, value in attribute_pairs.items())), None)
 
     def _get_final_parent_ou(self, organizational_units, hierarchy, parent_ou_id=None, force_create=False):
         organizational_unit = None
@@ -941,7 +942,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
             response = self.service_catalog.provision_product(**arguments)
         except botocore.exceptions.ClientError as err:
             if CREATING_ACCOUNT_ERROR_MESSAGE in err.response['Error']['Message']:
-                raise OUCreating
+                raise OUCreating from None
             raise
         response_metadata = response.get('ResponseMetadata', {})
         success = response_metadata.get('HTTPStatusCode') == 200
@@ -1237,7 +1238,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                        for region in self.get_available_regions()]
         validation = self._pre_deploy_check()
         self.logger.debug('Got validation response %s.', validation)
-        if not all([list(entry.values()).pop().get('Result') == 'SUCCESS' for entry in validation]):
+        if not all(list(entry.values()).pop().get('Result') == 'SUCCESS' for entry in validation):
             raise PreDeployValidationFailed(validation)
         invalid_emails = [email for email in [logging_account_email, security_account_email]
                           if self.is_email_used(email)]
@@ -1328,7 +1329,7 @@ class ControlTower(LoggerMixin):  # pylint: disable=too-many-instance-attributes
                        for region in self.governed_regions]
         validation = self._pre_deploy_check()
         self.logger.debug('Got validation response %s.', validation)
-        if not all([list(entry.values()).pop().get('Result') == 'SUCCESS' for entry in validation]):
+        if not all(list(entry.values()).pop().get('Result') == 'SUCCESS' for entry in validation):
             raise PreDeployValidationFailed(validation)
         if not all([self._create_control_tower_admin(),
                     self._create_control_tower_cloud_trail_role(),

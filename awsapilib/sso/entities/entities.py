@@ -51,7 +51,7 @@ LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
 
-class Entity(LoggerMixin):  # pylint: disable=too-few-public-methods
+class Entity(LoggerMixin):
     """The core entity."""
 
     def __init__(self, sso_instance, data):

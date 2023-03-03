@@ -412,7 +412,7 @@ class BaseConsoleInterface(LoggerMixin):
             captcha_obfuscation_token = properties.get('captchaObfuscationToken')
             return Captcha(url, captcha_token, captcha_obfuscation_token)
         except ValueError:
-            raise InvalidAuthentication(response.text)
+            raise InvalidAuthentication(response.text) from None
 
     @staticmethod
     def _get_oidc_info(referer):
@@ -590,7 +590,7 @@ class PasswordManager(BaseConsoleInterface):
         try:
             self._resolve_account_type(email)
         except UnableToResolveAccount:
-            raise UnableToRequestResetPassword(f'Could not resolve account type for email: {email}')
+            raise UnableToRequestResetPassword(f'Could not resolve account type for email: {email}') from None
         parameters = {'action': 'captcha',
                       'forgotpassword': True,
                       'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
@@ -719,8 +719,8 @@ class AccountManager(BaseConsoleInterface):
                                             mfa_serial=self.mfa_serial)
         response = session.get(update_url)
         if not response.ok:
-            ServerError(f'Unsuccessful response received: {response.text} '
-                        f'with status code: {response.status_code}')
+            raise ServerError(f'Unsuccessful response received: {response.text} '
+                              f'with status code: {response.status_code}')
         headers = {'X-Requested-With': 'XMLHttpRequest'}
         payload_ = {'redirect_uri': f'{Urls.billing_home}#/account',
                     'csrf': response.cookies.get('aws-signin-csrf', path='/updateaccount')}
