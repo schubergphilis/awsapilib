@@ -223,3 +223,9 @@ History
 ------------------
 
 * Fix for support for Control Tower update for versions over 2.6.
+
+
+3.1.3 (03-03-2023)
+------------------
+
+* Bump and loosen dependencies.
