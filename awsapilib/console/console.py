@@ -36,13 +36,19 @@ import os
 import time
 import urllib
 from dataclasses import dataclass
+from urllib.parse import parse_qsl, urlparse
 
+import requests
+from bs4 import BeautifulSoup as Bfs
 from pyotp import TOTP
+from fake_useragent import UserAgent
 from requests import Session
 
 from awsapilib.authentication import LoggerMixin, Urls, Domains
 from awsapilib.authentication.authentication import BaseAuthenticator, FilterCookie, CsrfTokenData
 from awsapilib.captcha import Solver, Iterm, Terminal
+from .metadata import MetadataManager
+from .configuration import DEFAULT_LOGIN_REDIRECT
 from .consoleexceptions import (NotSolverInstance,
                                 InvalidAuthentication,
                                 ServerError,
@@ -73,7 +79,6 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 LOGGER_BASENAME = '''console'''
 LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
-
 
 term_program = os.environ.get('TERM_PROGRAM', '').lower()
 CONSOLE_SOLVER = Iterm if 'iterm' in term_program else Terminal  # pylint: disable=invalid-name
@@ -391,17 +396,42 @@ class MfaManager(LoggerMixin):
 
 
 class BaseConsoleInterface(LoggerMixin):
-    """Manages accounts password filecycles and can provide a root console session."""
+    """Manages accounts password lifecycles and can provide a root console session."""
 
     def __init__(self, solver=CONSOLE_SOLVER):
-        self.session = Session()
         self._solver = solver()
         if not isinstance(self._solver, Solver):
             raise NotSolverInstance
+        self.user_agent = UserAgent().random
+        self.session = Session()
+        self.session.headers.update({'User-Agent': self.user_agent})
+        self._aws_url = 'https://aws.amazon.com'
         self._console_home_url = f'{Urls.console_home}'
         self._signin_url = f'{Urls.sign_in}/signin'
         self._reset_url = f'{Urls.sign_in}/resetpassword'
         self._update_url = f'{Urls.sign_in}/updateaccount'
+        self._mfa_url = f'{Urls.sign_in}/mfa'
+        csrf_token, session_id, oauth_redirect, challenge_redirect = self._parse_initial_redirect()
+        self._csrf_token = csrf_token
+        self._session_id = session_id
+        self._oath_redirect = oauth_redirect
+        self._challenge_redirect = challenge_redirect
+
+    def _parse_initial_redirect(self):
+        # we need to get all cookies so we start from the first two pages and then we follow the redirect path.
+        for url in [self._aws_url, self._console_home_url]:
+            self.session.get(url)
+        #TODO error checking.
+        params = {'nc2': 'h_ct',
+                  'src': 'header-signin',
+                  'hashArgs': '%23'}
+        response = self.session.get(f'{self._console_home_url}', params=params)
+        soup = Bfs(response.text, features='html.parser')
+        session_id = soup.find('meta', {'name': 'session_id'}).get('content')
+        csrf_token = soup.find('meta', {'name': 'csrf_token'}).get('content')
+        oauth_redirect = response.history[-3].headers.get('Location')
+        challenge_redirect = response.history[-1].headers.get('Location')
+        return csrf_token, session_id, oauth_redirect, challenge_redirect
 
     @staticmethod
     def _get_captcha_info(response):
@@ -449,19 +479,25 @@ class BaseConsoleInterface(LoggerMixin):
         self.logger.debug(f'Resolved account type successfully with response :{response.text}')
         return success
 
-    def _resolve_account_type_response(self, email, session=None):
-        session_ = session if session else self.session
-
+    def _resolve_account_type_response(self, email): # , session=None, redirect_uri=None):
+        # session_ = session if session else self.session
+        # redirect_uri = redirect_uri if redirect_uri else DEFAULT_LOGIN_REDIRECT
+        # csrf, session_id, redirect_uri, redirect_uri2 = self._parse_initial_redirect()
         parameters = {'action': 'resolveAccountType',
+                      'redirect_uri': self._challenge_redirect,
                       'email': email,
-                      'csrf': session_.cookies.get('aws-signin-csrf', path='/signin')}
-        response = session_.post(self._signin_url, data=parameters)
+                      'metadata1': MetadataManager(self.user_agent).get_random_metadata(self._oath_redirect),
+                      'csrf': self._csrf_token,
+                      'sessionId': self._session_id}
+        headers = {'X-Requested-With': 'XMLHttpRequest'}
+        response = self.session.post(self._signin_url, data=parameters, headers=headers)
+        self.logger.debug(f'Received response {response.text} with status code {response.status_code}')
         if response.json().get('properties', {}).get('CaptchaURL') is None:
             self.logger.debug('No Captcha information found.')
             return response
         self.logger.debug('Getting the resolve account type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
-        return session_.post(self._signin_url, data=parameters)
+        return self.session.post(self._signin_url, data=parameters, headers=headers)
 
     def get_mfa_type(self, email):
         """Gets the MFA type of the account.
@@ -473,7 +509,6 @@ class BaseConsoleInterface(LoggerMixin):
             The type of MFA set (only "SW" currently supported) None if no MFA is set.
 
         """
-        url = f'{Urls.sign_in}/mfa'
         payload = {'email': email,
                    'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin'),
                    'redirect_uri': f'{Urls.console_home}?'
@@ -482,7 +517,8 @@ class BaseConsoleInterface(LoggerMixin):
                                    f'isauthcode=true&'
                                    f'state=hashArgsFromTB_us-east-1_4d16544228963f5b'
                    }
-        response = self.session.post(url, data=payload)
+        response = self.session.post(self._mfa_url, data=payload)
+        self.logger.debug(f'Received response {response.text} with status code {response.status_code}')
         if not response.ok:
             raise UnableToQueryMFA(f'Unsuccessful response received: {response.text} '
                                    f'with status code: {response.status_code}')
@@ -495,27 +531,28 @@ class BaseConsoleInterface(LoggerMixin):
         parameters = self._update_parameters_with_captcha(parameters, response)
         return session_.post(self._signin_url, data=parameters)
 
-    def _get_root_console_redirect(self, email, password, session, mfa_serial=None):
+    def _get_root_console_redirect(self, email, password, mfa_serial=None):
+        #
+        # urls = Urls('us-east-1')
+        # url = urls.regional_console_home
+        # parameters = {'hashArgs': '#a', 'skipRegion': 'true', 'region': 'us-east-1'}
+        #
+        # self.logger.debug(f'Trying to get url: {url} with parameters :{parameters}')
+        # response = session.get(url, params=parameters)
+        # if not response.ok:
+        #     raise ServerError(f'Unsuccessful response received: {response.text} '
+        #                       f'with status code: {response.status_code}')
+        # oidc = self._get_oidc_info(response.history[0].headers.get('Location'))
+        self._resolve_account_type(email)
+        # response = self._resolve_account_type_response(email, session=session)
+        # captcha_url = response.json().get('properties', {}).get('CaptchaURL')
+        # captcha_status_token = response.json().get('properties', {}).get('captchaStatusToken')
 
-        urls = Urls('us-east-1')
-        url = urls.regional_console_home
-        parameters = {'hashArgs': '#a', 'skipRegion': 'true', 'region': 'us-east-1'}
-
-        self.logger.debug(f'Trying to get url: {url} with parameters :{parameters}')
-        response = session.get(url, params=parameters)
-        if not response.ok:
-            raise ServerError(f'Unsuccessful response received: {response.text} '
-                              f'with status code: {response.status_code}')
-        oidc = self._get_oidc_info(response.history[0].headers.get('Location'))
-        response = self._resolve_account_type_response(email, session=session)
-        captcha_url = response.json().get('properties', {}).get('CaptchaURL')
-        captcha_status_token = response.json().get('properties', {}).get('captchaStatusToken')
-
-        if any([not response.ok,
-                all([captcha_url is not None,
-                     captcha_status_token is None])]):
-            raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
-                                         f'with status code: {response.status_code}')
+        # if any([not response.ok,
+        #         all([captcha_url is not None,
+        #              captcha_status_token is None])]):
+        #     raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
+        #                                  f'with status code: {response.status_code}')
         mfa_type = self.get_mfa_type(email)
         if mfa_type:
             if not mfa_serial:
@@ -523,46 +560,54 @@ class BaseConsoleInterface(LoggerMixin):
                                     f'was provided.\n Please provide the initial serial that was used to setup MFA.')
             if not mfa_type == 'SW':
                 raise UnsupportedMFA('Currently on SW mfa type is supported.')
+        code_challenge = next(
+            (entry[1] for entry in parse_qsl(urlparse(self._challenge_redirect).query) if entry[0] == 'code_challenge'),
+            None)
         parameters = {'action': 'authenticateRoot',
-                      'client_id': oidc.client_id,
-                      'code_challenge_method': oidc.code_challenge_method,
-                      'code_challenge': oidc.code_challenge,
                       'email': email,
-                      'mfaSerial': 'undefined',
                       'password': password,
-                      'redirect_uri': oidc.redirect_url,
-                      'csrf': session.cookies.get('aws-signin-csrf', path='/signin')}
+                      'redirect_uri': 'https://console.aws.amazon.com/console/home?hashArgs=%23&isauthcode=true&nc2=h_ct&src=header-signin&state=hashArgsFromTB_eu-north-1_0c3cd31571be4358',
+                      'client_id': 'arn:aws:signin:::console/canvas',
+                      'csrf': self._csrf_token,
+                      'sessionId': self._session_id,
+                      'metadata1': MetadataManager(self.user_agent).get_random_metadata(self._challenge_redirect),
+                      'rememberMfa': False,
+                      'code_challenge': code_challenge,
+                      'code_challenge_method': 'SHA-256',
+                      'mfaSerial': ''}
 
-        if captcha_url is not None:
-            parameters['captcha_status_token'] = captcha_status_token
+        # if captcha_url is not None:
+        #     parameters['captcha_status_token'] = captcha_status_token
 
         if mfa_type:
             totp = TOTP(mfa_serial)
             parameters.update({'mfaType': mfa_type,
                                'mfa1': totp.now()})
-        response = session.post(self._signin_url, data=parameters)
+        headers = {'X-Requested-With': 'XMLHttpRequest'}
+        response = self.session.post(self._signin_url, data=parameters, headers=headers)
         success = self._validate_response(response)
         if all([success,
                 response.json().get('properties', {}).get('CaptchaURL') is not None]):
-            response = self._process_after_login_captcha(parameters, response, session)
+            response = self._process_after_login_captcha(parameters, response)
             success = self._validate_response(response)
-
+        redirect = response.json().get('properties', {}).get('RedirectTo')
         if not all([success,
-                    response.json().get('properties').get('RedirectTo') is not None]):
+                    redirect is not None]):
             raise InvalidAuthentication(f'Unable to authenticate, response received was: {response.text} '
                                         f'with status code: {response.status_code}')
-        return response.json().get('properties').get('RedirectTo')
+        return redirect
 
-    def _get_billing_session(self, email, password, region, unfiltered_session, mfa_serial=None):  # pylint: disable=too-many-arguments
-        session = Session()
-        authenticator = RootAuthenticator(session, region=region)
-        redirect_url = self._get_root_console_redirect(email, password, session, mfa_serial=mfa_serial)
+    def _get_billing_session(self, email, password, region, unfiltered_session,
+                             mfa_serial=None):  # pylint: disable=too-many-arguments
+        # session = Session()
+        authenticator = RootAuthenticator(self.session, region=region)
+        redirect_url = self._get_root_console_redirect(email, password, mfa_serial=mfa_serial)
         return authenticator.get_billing_root_session(redirect_url, unfiltered_session=unfiltered_session)
 
     def _get_iam_session(self, email, password, region, mfa_serial=None):
-        session = Session()
-        authenticator = RootAuthenticator(session, region=region)
-        redirect_url = self._get_root_console_redirect(email, password, session, mfa_serial=mfa_serial)
+        # session = Session()
+        authenticator = RootAuthenticator(self.session, region=region)
+        redirect_url = self._get_root_console_redirect(email, password, mfa_serial=mfa_serial)
         return authenticator.get_iam_root_session(redirect_url)
 
 
@@ -643,7 +688,8 @@ class PasswordManager(BaseConsoleInterface):
 class AccountManager(BaseConsoleInterface):
     """Models basic communication with the server for account and password management."""
 
-    def __init__(self, email, password, region, mfa_serial=None, solver=CONSOLE_SOLVER):  # pylint: disable=too-many-arguments
+    def __init__(self, email, password, region, mfa_serial=None,
+                 solver=CONSOLE_SOLVER):  # pylint: disable=too-many-arguments
         BaseConsoleInterface.__init__(self, solver=solver)
         self.email = email
         self.password = password

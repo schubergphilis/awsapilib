@@ -100,3 +100,23 @@ class UnableToGetVirtualMFA(Exception):
 
 class VirtualMFADeviceExists(Exception):
     """The device already exists."""
+
+
+class XXTEAException(Exception):
+    """XXTEA issue."""
+
+
+class InvalidMetadata(Exception):
+    """Metadata have not been accepted as valid."""
+
+
+class InvalidDecryption(Exception):
+    """Decryption did not seem to work correctly."""
+
+
+class EncryptionFailure(Exception):
+    """Encryption did not succeed."""
+
+
+class DecryptionFailure(Exception):
+    """Decryption did not succeed."""
