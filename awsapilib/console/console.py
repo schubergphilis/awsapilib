@@ -463,10 +463,12 @@ class BaseConsoleInterface(LoggerMixin):
 
     @staticmethod
     def _validate_response(response):
+        if not response.ok:
+            LOGGER.debug(f'Response failed with text: {response.text} and status code {response.status_code}')
+            return False
         try:
-            success = all([response.ok,
-                           any([response.json().get('state', '') == 'SUCCESS',
-                                response.json().get('properties', {}).get('CaptchaURL')])])
+            success = any([response.json().get('state', '') == 'SUCCESS',
+                           response.json().get('properties', {}).get('CaptchaURL')])
         except AttributeError:
             success = False
         return success
@@ -533,6 +535,7 @@ class BaseConsoleInterface(LoggerMixin):
         self.logger.debug('Getting the after login type captcha.')
         parameters = self._update_parameters_with_captcha(parameters, response)
         headers = {'X-Requested-With': 'XMLHttpRequest'}
+        self.logger.debug(f'Connecting to url {self._signin_url} with data: {parameters} and headers:{headers}')
         return session_.post(self._signin_url, data=parameters, headers=headers)
 
     def _get_root_console_redirect(self, email, password, mfa_serial=None):
@@ -588,7 +591,10 @@ class BaseConsoleInterface(LoggerMixin):
             parameters.update({'mfaType': mfa_type,
                                'mfa1': totp.now()})
         headers = {'X-Requested-With': 'XMLHttpRequest'}
+        count = 0
         while True:
+            count += 1
+            self.logger.debug(f'Connecting to url {self._signin_url} with data: {parameters} and headers:{headers}')
             response = self.session.post(self._signin_url, data=parameters, headers=headers)
             success = self._validate_response(response)
             if all([success,
@@ -597,6 +603,8 @@ class BaseConsoleInterface(LoggerMixin):
                 success = self._validate_response(response)
             redirect = response.json().get('properties', {}).get('RedirectTo')
             if redirect:
+                break
+            if count == 3:
                 break
         if not all([success,
                     redirect is not None]):

@@ -243,9 +243,7 @@ class BaseAuthenticator(LoggerMixin):
                          'Accept-Encoding': 'gzip, deflate, br',
                          'Accept-Language': 'en-US,en;q=0.5',
                          'Connection': 'keep-alive',
-                         'Upgrade-Insecure-Requests': '1',
-                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:73.0) '
-                                       'Gecko/20100101 Firefox/73.0'})
+                         'Upgrade-Insecure-Requests': '1'})
 
     @property
     def _standard_cookies(self):
