@@ -120,3 +120,7 @@ class EncryptionFailure(Exception):
 
 class DecryptionFailure(Exception):
     """Decryption did not succeed."""
+
+
+class InvalidCaptcha(Exception):
+    """Captcha provided was invalid."""

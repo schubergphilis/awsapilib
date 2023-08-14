@@ -35,6 +35,7 @@ Import all parts from console here
 from .console import AccountManager, PasswordManager
 from .consoleexceptions import (NotSolverInstance,
                                 InvalidAuthentication,
+                                InvalidCaptcha,
                                 ServerError,
                                 UnableToResolveAccount,
                                 UnableToUpdateAccount,
@@ -65,6 +66,7 @@ assert PasswordManager
 
 assert NotSolverInstance
 assert InvalidAuthentication
+assert InvalidCaptcha
 assert ServerError
 assert UnableToResolveAccount
 assert UnableToUpdateAccount

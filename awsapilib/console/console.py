@@ -35,7 +35,7 @@ import logging
 import os
 import time
 import urllib
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from urllib.parse import parse_qsl, urlparse
 
 import requests
@@ -43,6 +43,7 @@ from bs4 import BeautifulSoup as Bfs
 from pyotp import TOTP
 from fake_useragent import UserAgent
 from requests import Session
+from opnieuw import retry
 
 from awsapilib.authentication import LoggerMixin, Urls, Domains
 from awsapilib.authentication.authentication import BaseAuthenticator, FilterCookie, CsrfTokenData
@@ -51,6 +52,7 @@ from .metadata import MetadataManager
 from .configuration import DEFAULT_LOGIN_REDIRECT
 from .consoleexceptions import (NotSolverInstance,
                                 InvalidAuthentication,
+                                InvalidCaptcha,
                                 ServerError,
                                 UnableToResolveAccount,
                                 UnableToUpdateAccount,
@@ -100,7 +102,32 @@ class Oidc:
     client_id: str
     code_challenge: str
     code_challenge_method: str
-    redirect_url: str
+    redirect_uri: str
+
+    @property
+    def data(self):
+        return asdict(self)
+
+
+@dataclass
+class XAmz:
+    """Models an X-Amz response."""
+
+    security_token: str
+    date: str
+    algorithm: str
+    credential: str
+    signed_headers: str
+    signature: str
+
+    @property
+    def data(self):
+        return {'X-Amz-Security-Token': self.security_token,
+                'X-Amz-Date': self.date,
+                'X-Amz-Algorithm': self.algorithm,
+                'X-Amz-Credential': self.credential,
+                'X-Amz-SignedHeaders': self.signed_headers,
+                'X-Amz-Signature': self.signature}
 
 
 @dataclass
@@ -130,7 +157,7 @@ class MFA:
 
     @property
     def user_name(self):
-        """The user name set on the device."""
+        """The username set on the device."""
         return self._data.get(self._url).get('userName')
 
 
@@ -409,6 +436,7 @@ class BaseConsoleInterface(LoggerMixin):
         self._aws_url = 'https://aws.amazon.com'
         self._console_home_url = f'{Urls.console_home}'
         self._signin_url = f'{Urls.sign_in}/signin'
+        self._oauth_url = f'{Urls.sign_in}/oauth'
         self._reset_url = f'{Urls.sign_in}/resetpassword'
         self._update_url = f'{Urls.sign_in}/updateaccount'
         self._mfa_url = f'{Urls.sign_in}/mfa'
@@ -421,17 +449,30 @@ class BaseConsoleInterface(LoggerMixin):
     def _parse_initial_redirect(self):
         # we need to get all cookies, so we start from the first two pages, then we follow the redirect path.
         for url in [self._aws_url, self._console_home_url]:
+            LOGGER.debug(f'Trying to get {url} for all initial cookies.')
             self.session.get(url)
-        #TODO error checking.
+        # TODO error checking.
         params = {'nc2': 'h_ct',
                   'src': 'header-signin',
                   'hashArgs': '%23'}
         response = self.session.get(f'{self._console_home_url}', params=params)
+        if not response.ok:
+            LOGGER.debug(f'Request failed with response status: {response.status_code} and text: {response.content}')
+            raise ServerError('Unable to get initial pages!')
         soup = Bfs(response.text, features='html.parser')
         session_id = soup.find('meta', {'name': 'session_id'}).get('content')
         csrf_token = soup.find('meta', {'name': 'csrf_token'}).get('content')
         oauth_redirect = response.history[-3].headers.get('Location')
         challenge_redirect = response.history[-1].headers.get('Location')
+        # x_amz_info = self._get_x_amz_info(oauth_redirect)
+        # oidc_info = self._get_oidc_info(oauth_redirect)
+        # LOGGER.debug(f'Trying to get oauth cookies from url {self._oauth_url}')
+        # response = self.session.get(self._oauth_url, params={'response_type': 'code',
+        #                                                      **x_amz_info.data,
+        #                                                      **oidc_info.data})
+        # if not response.ok:
+        #     LOGGER.debug(f'Request failed with response status: {response.status_code} and text: {response.content}')
+        #     raise ServerError('Unable to get initial pages!')
         return csrf_token, session_id, oauth_redirect, challenge_redirect
 
     @staticmethod
@@ -446,13 +487,23 @@ class BaseConsoleInterface(LoggerMixin):
             raise InvalidAuthentication(response.text) from None
 
     @staticmethod
-    def _get_oidc_info(referer):
-        parsed_query = dict(urllib.parse.parse_qsl(referer))
-        return Oidc(parsed_query.get('client_id') or
-                    parsed_query.get('https://signin.aws.amazon.com/oauth?client_id'),
+    def _get_oidc_info(url):
+        parsed_query = dict(urllib.parse.parse_qsl(url))
+        client_id = next((key for key in parsed_query if key.endswith('client_id')), None)
+        return Oidc(parsed_query.get(client_id),
                     parsed_query.get('code_challenge'),
                     parsed_query.get('code_challenge_method'),
                     parsed_query.get('redirect_uri'))
+
+    @staticmethod
+    def _get_x_amz_info(url):
+        parsed_query = dict(urllib.parse.parse_qsl(url))
+        return XAmz(parsed_query.get('X-Amz-Security-Token'),
+                    parsed_query.get('X-Amz-Date'),
+                    parsed_query.get('X-Amz-Algorithm'),
+                    parsed_query.get('X-Amz-Credential'),
+                    parsed_query.get('X-Amz-SignedHeaders'),
+                    parsed_query.get('X-Amz-Signature'))
 
     def _update_parameters_with_captcha(self, parameters, response):
         captcha = self._get_captcha_info(response)
@@ -469,6 +520,8 @@ class BaseConsoleInterface(LoggerMixin):
         try:
             success = any([response.json().get('state', '') == 'SUCCESS',
                            response.json().get('properties', {}).get('CaptchaURL')])
+            if response.json().get('properties', {}).get('recovery_result', '') == 'wrong_captcha':
+                raise InvalidCaptcha(response.json())
         except AttributeError:
             success = False
         return success
@@ -482,7 +535,7 @@ class BaseConsoleInterface(LoggerMixin):
         self.logger.debug(f'Resolved account type successfully with response :{response.text}')
         return success
 
-    def _resolve_account_type_response(self, email): # , session=None, redirect_uri=None):
+    def _resolve_account_type_response(self, email):  # , session=None, redirect_uri=None):
         # session_ = session if session else self.session
         # redirect_uri = redirect_uri if redirect_uri else DEFAULT_LOGIN_REDIRECT
         # csrf, session_id, redirect_uri, redirect_uri2 = self._parse_initial_redirect()
@@ -572,7 +625,7 @@ class BaseConsoleInterface(LoggerMixin):
         parameters = {'action': 'authenticateRoot',
                       'email': email,
                       'password': password,
-                      'redirect_uri': 'https://console.aws.amazon.com/console/home?hashArgs=%23&isauthcode=true&nc2=h_ct&src=header-signin&state=hashArgsFromTB_eu-north-1_0c3cd31571be4358',
+                      'redirect_uri': 'https://console.aws.amazon.com/console/home?hashArgs=%23&isauthcode=true&nc2=h_ct&src=header-signin&state=hashArgsFromTB_eu-north-1_8507e4d5162f4752',
                       'client_id': 'arn:aws:signin:::console/canvas',
                       'csrf': self._csrf_token,
                       'sessionId': self._session_id,
@@ -613,11 +666,11 @@ class BaseConsoleInterface(LoggerMixin):
         return redirect
 
     def _get_billing_session(self, email, password, region, mfa_serial=None):  # pylint: disable=too-many-arguments
-                             # mfa_serial=None):  # pylint: disable=too-many-arguments
+        # mfa_serial=None):  # pylint: disable=too-many-arguments
         # session = Session()
         redirect_url = self._get_root_console_redirect(email, password, mfa_serial=mfa_serial)
         authenticator = RootAuthenticator(self.session, region=region)
-        return authenticator.get_billing_root_session(redirect_url) #, unfiltered_session=unfiltered_session)
+        return authenticator.get_billing_root_session(redirect_url)  # , unfiltered_session=unfiltered_session)
 
     def _get_iam_session(self, email, password, region, mfa_serial=None):
         # session = Session()
@@ -629,8 +682,9 @@ class BaseConsoleInterface(LoggerMixin):
 class PasswordManager(BaseConsoleInterface):
     """Models interaction for account password reset."""
 
+    @retry(retry_on_exceptions=InvalidCaptcha, max_calls_total=3, retry_window_after_first_call_in_seconds=15)
     def request_password_reset(self, email):
-        """Requests a password reset for an account by it's email.
+        """Requests a password reset for an account by its email.
 
         Args:
             email: The email of the account to request the password reset.
@@ -669,6 +723,7 @@ class PasswordManager(BaseConsoleInterface):
         self.logger.info('Requested password reset successfully')
         return True
 
+    @retry(retry_on_exceptions=InvalidCaptcha, max_calls_total=3, retry_window_after_first_call_in_seconds=15)
     def reset_password(self, reset_url, password):
         """Resets password of an aws account.
 
