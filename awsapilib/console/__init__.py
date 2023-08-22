@@ -29,7 +29,7 @@ console package.
 Import all parts from console here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
 
 from .console import AccountManager, PasswordManager

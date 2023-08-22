@@ -29,15 +29,9 @@ awsauthenticationlib package.
 Import all parts from awsauthenticationlib here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
-from .authentication import (LoggerMixin,
-                             Authenticator,
-                             Urls,
-                             Domains)
-from .authenticationexceptions import (InvalidCredentials,
-                                       NoSigninTokenReceived,
-                                       ExpiredCredentials)
+from .authentication import AssumedRoleAuthenticator
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -49,11 +43,4 @@ __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is to 'use' the module(s), so lint doesn't complain
-assert LoggerMixin
-assert Authenticator
-assert Urls
-assert Domains
-
-assert NoSigninTokenReceived
-assert InvalidCredentials
-assert ExpiredCredentials
+assert AssumedRoleAuthenticator

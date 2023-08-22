@@ -27,7 +27,7 @@
 Main code for billing.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
@@ -37,15 +37,15 @@ from datetime import datetime, timedelta
 
 from bs4 import BeautifulSoup as Bfs
 
-from awsapilib.authentication import Authenticator, LoggerMixin
-from awsapilib.authentication import InvalidCredentials
+from awsapilib.awsapilib import LoggerMixin
+from awsapilib.authentication import AssumedRoleAuthenticator
+from awsapilib.awsapilibexceptions import InvalidCredentials
 
 from .billingexceptions import (InvalidCountryCode,
                                 NonEditableSetting,
                                 IAMAccessDenied,
                                 InvalidCurrency,
                                 ServerError)
-
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -240,7 +240,7 @@ class Billing(LoggerMixin):
     """Models Control Tower by wrapping around service catalog."""
 
     def __init__(self, arn, region=None):
-        self.aws_authenticator = Authenticator(arn)
+        self.aws_authenticator = AssumedRoleAuthenticator(arn)
         self.session = self._get_authenticated_session()
         self.region = region or self.aws_authenticator.region
         self.rest_api = 'https://console.aws.amazon.com/billing/rest/v1.0'

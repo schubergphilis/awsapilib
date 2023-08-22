@@ -67,6 +67,7 @@ class XXTEA:
     Note:
         Info can be found at: https://en.wikipedia.org/wiki/XXTEA?useskin=vector
         Initial python implementation can be found at: from https://github.com/andersekbom/prycut
+
     """
 
     def __init__(self, key: Union[str, bytes]) -> None:
@@ -74,6 +75,7 @@ class XXTEA:
 
         Note:
             The key must be 128-bit (16 characters) in length.
+
         """
         key = key.encode() if isinstance(key, str) else key
         if len(key) != 16:
@@ -99,7 +101,7 @@ class XXTEA:
         delta = 2654435769
         if n > 1:  # Encoding
             z = v[n - 1]
-            q = math.floor(6 + (52 / n // 1))
+            q = math.floor(6 + (52 / n // 1))  # noqa
             while q > 0:
                 q -= 1
                 sum_ = u32(sum_ + delta)
@@ -115,7 +117,7 @@ class XXTEA:
 
         if n < -1:  # Decoding
             n = -n
-            q = math.floor(6 + (52 / n // 1))
+            q = math.floor(6 + (52 / n // 1))  # noqa
             sum_ = u32(q * delta)
             while sum_ != 0:
                 e = u32(sum_ >> 2) & 3
@@ -143,12 +145,12 @@ class XXTEA:
     @staticmethod
     def generate_hex_checksum(data: str) -> str:
         block_size = 8
-        checksum = binascii.crc32(data.encode()) % 2 ** 32
+        checksum = binascii.crc32(data.encode()) % 2 ** 32  # noqa
         checksum = format(checksum, 'X')
         return checksum.zfill(block_size) if len(checksum) < block_size else checksum
 
     def _process(self, data: Union[str, bytes], mode: str = 'encrypt'):
-        ldata = math.ceil(len(data) / 4)
+        ldata = math.ceil(len(data) / 4)  # noqa
         idata = self._bytes_to_longs(data)
         ldata = -ldata if mode == 'decrypt' else ldata
         if self._xxtea(idata, ldata, self.key) != 0:
@@ -197,7 +199,7 @@ class Lsubid:
 
         Calculate values based on the user agent set and the timestamp that it has run on, along with a hard coded div.
 
-        returns:
+        Returns:
             Calculated values of r, n, i and o
 
         """
@@ -216,7 +218,7 @@ class Lsubid:
 
     def _slice_from_seed_values(self, slice_size: int, timestamp: int):
         """Returns a size of provided slice_size from the calculated number."""
-        r, n, i, o = self._get_seed_values(timestamp)
+        r, _, i, o = self._get_seed_values(timestamp)
         e = 2091639 * r + 23283064365386964e-26 * o
         o = int(e // 1)
         i = e - o
@@ -241,6 +243,7 @@ class Lsubid:
 @dataclass
 class Resolution:
     """Models a screen resolution and the required representation for metadata1."""
+
     width: int
     height: int
     other: int
@@ -302,8 +305,8 @@ class MetadataManager:
 
         """
         start = lambda: int(time.time() * 1000)  # noqa
-        end_short = lambda: int(time.time() * 1000) + randint(0, 100)  # noqa
-        end_long = lambda: int(time.time() * 1000) + randint(400000, 600000)  # noqa
+        end_short = lambda: int(time.time() * 1000) + randint(0, 10)  # noqa
+        end_long = lambda: int(time.time() * 1000) + randint(5, 30)  # noqa
         key_presses = randint(0, 10)
         mouse_cycles = randint(3, 12)
         data = {'userAgent': self.user_agent,
@@ -429,8 +432,22 @@ class MetadataManager:
                                            'secureConnectionStart': start(),
                                            'unloadEventEnd': 0,
                                            'unloadEventStart': 0}},
-                'scripts': {'dynamicUrlCount': 0,
-                            'dynamicUrls': [],
+                'scripts': {'dynamicUrlCount': 15,
+                            'dynamicUrls': ['/static/js/awsc-panorama.js',
+                                            '/static/js/signin-helper.js',
+                                            '/static/js/metrics-helper-jquery.js',
+                                            '/static/js/constants.js',
+                                            '/static/js/common/load-globals.js',
+                                            '/static/js/common/request-parameters.js',
+                                            '/static/js/fwcim-cdn-prod.js',
+                                            '/static/js/common/init-fwcim.js',
+                                            '/static/js/panorama-nav-init.js',
+                                            '/static/js/jquery.min.js',
+                                            '/static/js/u2f-api.js',
+                                            '/static/js/login-root.js',
+                                            '/static/js/performance.js',
+                                            '/static/js/AWSMarketingTargetServiceAnalyticsClientSignin.js',
+                                            '/static/js/common/init-marketing-analytics.js'],
                             'inlineHashes': [],
                             'inlineHashesCount': 0},
                 'token': {'isCompatible': True, 'pageHasCaptcha': 0},
@@ -447,7 +464,7 @@ class MetadataManager:
         return self._encrypt_metadata(self._generate_metadata(redirect_url))
 
     def _encrypt_metadata(self, metadata: str) -> str:
-        """Encrypts metadata to be used to log in to Amazon
+        """Encrypts metadata to be used to log in to Amazon.
 
         Returns:
             The encrypted metadata.

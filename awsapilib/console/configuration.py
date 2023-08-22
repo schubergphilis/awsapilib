@@ -41,16 +41,7 @@ __maintainer__ = '''Costas Tyfoxylos'''
 __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
-
-DEFAULT_LOGIN_REDIRECT = 'https://console.aws.amazon.com/console/home?' \
-                         'hashArgs=%23' \
-                         '&isauthcode=true' \
-                         '&nc2=h_ct' \
-                         '&src=header-signin' \
-                         '&state=hashArgsFromTB_eu-north-1_cde4389fa2c2874a'
-
 METADATA_KEY: bytes = b'a\x03\x8fp4\x18\x97\x99:\xeb\xe7\x8b\x85\x97$4'
-
 
 RESOLUTIONS = [(2560, 1080, 1055, 24),
                (2048, 864, 839, 30),

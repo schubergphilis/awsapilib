@@ -27,13 +27,14 @@
 Main code for billing.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
 import logging
 
-from awsapilib.authentication import Authenticator, LoggerMixin
+from awsapilib.awsapilib import LoggerMixin
+from awsapilib.authentication import AssumedRoleAuthenticator
 
 from .cloudformationexceptions import ServerError
 
@@ -57,7 +58,7 @@ class Cloudformation(LoggerMixin):
     """Models Control Tower by wrapping around service catalog."""
 
     def __init__(self, arn, region=None):
-        self.aws_authenticator = Authenticator(arn)
+        self.aws_authenticator = AssumedRoleAuthenticator(arn)
         self.session = self._get_authenticated_session()
         self.region = region or self.aws_authenticator.region
 

@@ -27,16 +27,15 @@
 Main code for sso.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
 import copy
 import logging
 import json
-from awsapilib.authentication import (Authenticator,
-                                      LoggerMixin,
-                                      Urls)
+from awsapilib.awsapilib import LoggerMixin, Urls
+from awsapilib.authentication import AssumedRoleAuthenticator
 from .ssoexceptions import (UnsupportedTarget,
                             NoPermissionSet,
                             NoAccount,
@@ -95,7 +94,7 @@ class Sso(LoggerMixin):
     DEFAULT_AWS_REGION = 'eu-west-1'
 
     def __init__(self, arn, region=None):
-        self.aws_authenticator = Authenticator(arn, region=region)
+        self.aws_authenticator = AssumedRoleAuthenticator(arn, region=region)
         self._urls = Urls(self.aws_region)
         self.session = self._get_authenticated_session()
         self._directory_id = None

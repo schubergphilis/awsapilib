@@ -27,45 +27,39 @@
 Main code for console.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
 import logging
 import os
 import time
-import urllib
 from dataclasses import dataclass, asdict
 from urllib.parse import parse_qsl, urlparse
 
-import requests
 from bs4 import BeautifulSoup as Bfs
-from pyotp import TOTP
-from fake_useragent import UserAgent
-from requests import Session
 from opnieuw import retry
+from pyotp import TOTP
 
-from awsapilib.authentication import LoggerMixin, Urls, Domains
-from awsapilib.authentication.authentication import BaseAuthenticator, FilterCookie, CsrfTokenData
+from awsapilib.authentication.authentication import CsrfTokenData
+from awsapilib.awsapilib import AwsSession
+from awsapilib.awsapilib import RANDOM_USER_AGENT, LoggerMixin, Urls
 from awsapilib.captcha import Solver, Iterm, Terminal
-from .metadata import MetadataManager
-from .configuration import DEFAULT_LOGIN_REDIRECT
 from .consoleexceptions import (NotSolverInstance,
                                 InvalidAuthentication,
                                 InvalidCaptcha,
                                 ServerError,
                                 UnableToResolveAccount,
-                                UnableToUpdateAccount,
                                 UnableToQueryMFA,
                                 NoMFAProvided,
                                 UnsupportedMFA,
-                                UnableToRequestResetPassword,
-                                UnableToResetPassword,
                                 UnableToCreateVirtualMFA,
                                 UnableToEnableVirtualMFA,
                                 UnableToDisableVirtualMFA,
                                 UnableToGetVirtualMFA,
-                                VirtualMFADeviceExists)
+                                UnableToUpdateAccount,
+                                VirtualMFADeviceExists, UnableToResetPassword, UnableToRequestResetPassword)
+from .metadata import MetadataManager
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -167,134 +161,6 @@ class VirtualMFADevice:
 
     seed: str
     serial: str
-
-
-class RootAuthenticator(BaseAuthenticator):
-    """Interacts with the console to retrieve console and billing page sessions."""
-
-    def __init__(self, session, region):
-        super().__init__(region=region)
-        self._session = session
-        self.region = region
-        self.urls = Urls(self.region)
-        self.domains = Domains(self.region)
-
-    def _get_console_root_session(self, redirect_url):
-        service = 'console'
-        home_url_response = self._get_response(redirect_url, extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                                            FilterCookie('aws-creds-code-verifier', )])
-        url = home_url_response.headers.get('Location')
-        dashboard = self._get_response(url, extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                           FilterCookie('aws-creds', f'{service}', )])
-        if not dashboard.ok:
-            self.logger.error(f'Received broken response: {dashboard.text}')
-        return dashboard.ok
-
-    def get_billing_root_session(self, redirect_url):
-        """Retrieves a billing session, filtered with specific cookies or not depending on the usage.
-
-        Args:
-            redirect_url (str): The redirect url provided to initiate the authentication flow after the captcha.
-            unfiltered_session (bool): Returns a full session if unfiltered, or a filtered session
-                with xsrf token if set to True. Defaults to False.
-
-        Returns:
-            session (Session): A valid session.
-
-        """
-        if not self._get_console_root_session(redirect_url):
-            raise InvalidAuthentication('Unable to get a valid authenticated session for root console.')
-        service = 'billing'
-
-        _ = self._get_response(self.urls.billing_home)
-
-        hash_args = self._get_response(self.urls.billing_home,
-                                       params={'state': 'hashArgs#'},
-                                       extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                      FilterCookie('aws-creds-code-verifier', f'/{service}')])
-        _ = self._get_response(hash_args.headers.get('Location'),
-                               extra_cookies=[
-                                   FilterCookie('aws-userInfo-signed', )])
-
-        billing_response = self._get_response(self.urls.global_billing_home,
-                                              params={'state': 'hashArgs#', 'skipRegion': 'true',
-                                                      'region': 'us-east-1'},
-                                              extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                             FilterCookie('aws-creds-code-verifier', f'/{service}')])
-
-        oauth = self._get_response(billing_response.headers.get('Location'),
-                                   extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
-                                                  FilterCookie('aws-userInfo-signed', ),
-                                                  FilterCookie('aws-signin-account-info', )])
-
-        oauth_challenge = self._get_response(oauth.headers.get('Location'),
-                                             extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                            FilterCookie('aws-creds-code-verifier', f'/{service}')
-                                                            ])
-
-        dashboard = self._get_response(oauth_challenge.headers.get('Location'),
-                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}')])
-        # if unfiltered_session:
-        #     return self._session
-        csrf_token_data = CsrfTokenData(entity_type='input',
-                                        attributes={'id': 'xsrfToken'},
-                                        attribute_value='value',
-                                        headers_name='x-awsbc-xsrf-token')
-        extra_cookies = [FilterCookie('aws-creds', f'/{service}'),
-                         FilterCookie('aws-signin-csrf', '/signin'),
-                         ]
-        return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
-
-    def get_iam_root_session(self, redirect_url):
-        """Retrieves an iam console session, filtered with specific cookies or not depending on the usage.
-
-        Args:
-            redirect_url (str): The redirect url provided to initiate the authentication flow after the captcha.
-
-        Returns:
-            session (Session): A valid session.
-
-        """
-        if not self._get_console_root_session(redirect_url):
-            raise InvalidAuthentication('Unable to get a valid authenticated session for root console.')
-        service = 'iam'
-        url = f'{self.urls.iam_home}?region=us-east-2'
-        _ = self._session.get(url)
-        hash_args = self._get_response(url,
-                                       params={'state': 'hashArgs#'},
-                                       extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                      FilterCookie('aws-creds-code-verifier', f'/{service}')])
-        _ = self._get_response(hash_args.headers.get('Location'),
-                               extra_cookies=[
-                                   FilterCookie('aws-userInfo-signed', )])
-
-        regional_response = self._get_response(self.urls.global_iam_home,
-                                               params={'state': 'hashArgs#', 'skipRegion': 'true',
-                                                       'region': 'us-east-1'},
-                                               extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                              FilterCookie('aws-creds-code-verifier', f'/{service}')])
-
-        oauth = self._get_response(regional_response.headers.get('Location'),
-                                   extra_cookies=[FilterCookie('aws-creds', self.domains.sign_in),
-                                                  FilterCookie('aws-userInfo-signed', ),
-                                                  FilterCookie('aws-signin-account-info', )])
-
-        oauth_challenge = self._get_response(oauth.headers.get('Location'),
-                                             extra_cookies=[FilterCookie('aws-userInfo-signed', ),
-                                                            FilterCookie('aws-creds-code-verifier', f'/{service}')
-                                                            ])
-
-        dashboard = self._get_response(oauth_challenge.headers.get('Location'),
-                                       extra_cookies=[FilterCookie('aws-creds', f'/{service}')])
-
-        csrf_token_data = CsrfTokenData(entity_type='meta',
-                                        attributes={'id': 'xsrf-token'},
-                                        attribute_value='data-token',
-                                        headers_name='X-CSRF-TOKEN')
-        extra_cookies = [FilterCookie('aws-creds', f'/{service}'),
-                         FilterCookie('aws-signin-csrf', '/signin'),
-                         ]
-        return self._get_session_from_console(dashboard, csrf_token_data, extra_cookies)
 
 
 class IamAccess(LoggerMixin):
@@ -422,142 +288,18 @@ class MfaManager(LoggerMixin):
         return MFA(response.json().get('_embedded')) if response.json().get('_embedded') else None
 
 
-class BaseConsoleInterface(LoggerMixin):
+class RootAuthenticator(LoggerMixin):
     """Manages accounts password lifecycles and can provide a root console session."""
 
-    def __init__(self, solver=CONSOLE_SOLVER):
+    def __init__(self, solver=CONSOLE_SOLVER, user_agent=RANDOM_USER_AGENT):
         self._solver = solver()
         if not isinstance(self._solver, Solver):
             raise NotSolverInstance
-        self.user_agent = UserAgent().random
-        self._metadata_manager = MetadataManager(self.user_agent)
-        self.session = Session()
-        self.session.headers.update({'User-Agent': self.user_agent})
-        self._aws_url = 'https://aws.amazon.com'
-        self._console_home_url = f'{Urls.console_home}'
-        self._signin_url = f'{Urls.sign_in}/signin'
-        self._oauth_url = f'{Urls.sign_in}/oauth'
-        self._reset_url = f'{Urls.sign_in}/resetpassword'
-        self._update_url = f'{Urls.sign_in}/updateaccount'
-        self._mfa_url = f'{Urls.sign_in}/mfa'
-        csrf_token, session_id, oauth_redirect, challenge_redirect = self._parse_initial_redirect()
-        self._csrf_token = csrf_token
-        self._session_id = session_id
-        self._oath_redirect = oauth_redirect
-        self._challenge_redirect = challenge_redirect
-
-    def _parse_initial_redirect(self):
-        # we need to get all cookies, so we start from the first two pages, then we follow the redirect path.
-        for url in [self._aws_url, self._console_home_url]:
-            LOGGER.debug(f'Trying to get {url} for all initial cookies.')
-            self.session.get(url)
-        # TODO error checking.
-        params = {'nc2': 'h_ct',
-                  'src': 'header-signin',
-                  'hashArgs': '%23'}
-        response = self.session.get(f'{self._console_home_url}', params=params)
-        if not response.ok:
-            LOGGER.debug(f'Request failed with response status: {response.status_code} and text: {response.content}')
-            raise ServerError('Unable to get initial pages!')
-        soup = Bfs(response.text, features='html.parser')
-        session_id = soup.find('meta', {'name': 'session_id'}).get('content')
-        csrf_token = soup.find('meta', {'name': 'csrf_token'}).get('content')
-        oauth_redirect = response.history[-3].headers.get('Location')
-        challenge_redirect = response.history[-1].headers.get('Location')
-        # x_amz_info = self._get_x_amz_info(oauth_redirect)
-        # oidc_info = self._get_oidc_info(oauth_redirect)
-        # LOGGER.debug(f'Trying to get oauth cookies from url {self._oauth_url}')
-        # response = self.session.get(self._oauth_url, params={'response_type': 'code',
-        #                                                      **x_amz_info.data,
-        #                                                      **oidc_info.data})
-        # if not response.ok:
-        #     LOGGER.debug(f'Request failed with response status: {response.status_code} and text: {response.content}')
-        #     raise ServerError('Unable to get initial pages!')
-        return csrf_token, session_id, oauth_redirect, challenge_redirect
+        self.user_agent = user_agent
+        self.metadata_manager = MetadataManager(self.user_agent)
 
     @staticmethod
-    def _get_captcha_info(response):
-        try:
-            properties = response.json().get('properties', {})
-            url = properties.get('CaptchaURL')
-            captcha_token = properties.get('CES')
-            captcha_obfuscation_token = properties.get('captchaObfuscationToken')
-            return Captcha(url, captcha_token, captcha_obfuscation_token)
-        except ValueError:
-            raise InvalidAuthentication(response.text) from None
-
-    @staticmethod
-    def _get_oidc_info(url):
-        parsed_query = dict(urllib.parse.parse_qsl(url))
-        client_id = next((key for key in parsed_query if key.endswith('client_id')), None)
-        return Oidc(parsed_query.get(client_id),
-                    parsed_query.get('code_challenge'),
-                    parsed_query.get('code_challenge_method'),
-                    parsed_query.get('redirect_uri'))
-
-    @staticmethod
-    def _get_x_amz_info(url):
-        parsed_query = dict(urllib.parse.parse_qsl(url))
-        return XAmz(parsed_query.get('X-Amz-Security-Token'),
-                    parsed_query.get('X-Amz-Date'),
-                    parsed_query.get('X-Amz-Algorithm'),
-                    parsed_query.get('X-Amz-Credential'),
-                    parsed_query.get('X-Amz-SignedHeaders'),
-                    parsed_query.get('X-Amz-Signature'))
-
-    def _update_parameters_with_captcha(self, parameters, response):
-        captcha = self._get_captcha_info(response)
-        parameters.update({'captcha_guess': self._solver.solve(captcha.url),
-                           'captcha_token': captcha.token,
-                           'captchaObfuscationToken': captcha.obfuscation_token})
-        return parameters
-
-    @staticmethod
-    def _validate_response(response):
-        if not response.ok:
-            LOGGER.debug(f'Response failed with text: {response.text} and status code {response.status_code}')
-            return False
-        try:
-            success = any([response.json().get('state', '') == 'SUCCESS',
-                           response.json().get('properties', {}).get('CaptchaURL')])
-            if response.json().get('properties', {}).get('recovery_result', '') == 'wrong_captcha':
-                raise InvalidCaptcha(response.json())
-        except AttributeError:
-            success = False
-        return success
-
-    def _resolve_account_type(self, email):
-        response = self._resolve_account_type_response(email)
-        success = self._validate_response(response)
-        if not success:
-            raise UnableToResolveAccount(f'Failed to resolve account type with response: {response.text} '
-                                         f'and status code {response.status_code}')
-        self.logger.debug(f'Resolved account type successfully with response :{response.text}')
-        return success
-
-    def _resolve_account_type_response(self, email):  # , session=None, redirect_uri=None):
-        # session_ = session if session else self.session
-        # redirect_uri = redirect_uri if redirect_uri else DEFAULT_LOGIN_REDIRECT
-        # csrf, session_id, redirect_uri, redirect_uri2 = self._parse_initial_redirect()
-        parameters = {'action': 'resolveAccountType',
-                      'redirect_uri': self._challenge_redirect,
-                      'email': email,
-                      'metadata1': self._metadata_manager.get_random_metadata(self._oath_redirect),
-                      'csrf': self._csrf_token,
-                      'sessionId': self._session_id}
-        headers = {'X-Requested-With': 'XMLHttpRequest'}
-        response = self.session.post(self._signin_url, data=parameters, headers=headers)
-        self.logger.debug(f'Received response {response.text} with status code {response.status_code}')
-        if not response.ok:
-            self.logger.warning(f'Request failed with response: {response.text} and status: {response.status_code}')
-        if response.json().get('properties', {}).get('CaptchaURL') is None:
-            self.logger.debug('No Captcha information found.')
-            return response
-        self.logger.debug('Getting the resolve account type captcha.')
-        parameters = self._update_parameters_with_captcha(parameters, response)
-        return self.session.post(self._signin_url, data=parameters, headers=headers)
-
-    def get_mfa_type(self, email):
+    def _get_mfa_type(session, email):
         """Gets the MFA type of the account.
 
         Args:
@@ -568,121 +310,290 @@ class BaseConsoleInterface(LoggerMixin):
 
         """
         payload = {'email': email,
-                   'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin'),
+                   'csrf': session.cookies.get('aws-signin-csrf', path='/signin'),
                    'redirect_uri': f'{Urls.console_home}?'
                                    f'fromtb=true&'
                                    f'hashArgs=%23&'
                                    f'isauthcode=true&'
                                    f'state=hashArgsFromTB_us-east-1_4d16544228963f5b'
                    }
-        response = self.session.post(self._mfa_url, data=payload)
-        self.logger.debug(f'Received response {response.text} with status code {response.status_code}')
+        response = session.post(Urls.mfa, data=payload)
         if not response.ok:
             raise UnableToQueryMFA(f'Unsuccessful response received: {response.text} '
                                    f'with status code: {response.status_code}')
+        LOGGER.debug(f'Received response {response.text} with status code {response.status_code}')
         mfa_type = response.json().get('mfaType')
         return None if mfa_type == 'NONE' else mfa_type
 
-    def _process_after_login_captcha(self, parameters, response, session=None):
-        session_ = session if session else self.session
-        self.logger.debug('Getting the after login type captcha.')
-        parameters = self._update_parameters_with_captcha(parameters, response)
-        headers = {'X-Requested-With': 'XMLHttpRequest'}
-        self.logger.debug(f'Connecting to url {self._signin_url} with data: {parameters} and headers:{headers}')
-        return session_.post(self._signin_url, data=parameters, headers=headers)
-
-    def _get_root_console_redirect(self, email, password, mfa_serial=None):
-        #
-        # urls = Urls('us-east-1')
-        # url = urls.regional_console_home
-        # parameters = {'hashArgs': '#a', 'skipRegion': 'true', 'region': 'us-east-1'}
-        #
-        # self.logger.debug(f'Trying to get url: {url} with parameters :{parameters}')
-        # response = session.get(url, params=parameters)
-        # if not response.ok:
-        #     raise ServerError(f'Unsuccessful response received: {response.text} '
-        #                       f'with status code: {response.status_code}')
-        # oidc = self._get_oidc_info(response.history[0].headers.get('Location'))
-        mfa_type = self.get_mfa_type(email)
+    @staticmethod
+    def _validate_mfa_type(session, email, mfa_serial):
+        mfa_type = RootAuthenticator._get_mfa_type(session, email)
         if mfa_type:
             if not mfa_serial:
                 raise NoMFAProvided(f'Account with email "{email}" is protected by mfa type "{mfa_type}" but no serial '
                                     f'was provided.\n Please provide the initial serial that was used to setup MFA.')
-            if not mfa_type == 'SW':
+            if mfa_type != 'SW':
                 raise UnsupportedMFA('Currently on SW mfa type is supported.')
-        self._resolve_account_type(email)
-        # response = self._resolve_account_type_response(email, session=session)
-        # captcha_url = response.json().get('properties', {}).get('CaptchaURL')
-        # captcha_status_token = response.json().get('properties', {}).get('captchaStatusToken')
+        return mfa_type
 
-        # if any([not response.ok,
-        #         all([captcha_url is not None,
-        #              captcha_status_token is None])]):
-        #     raise UnableToResolveAccount(f'Unable to resolve the account, response received: {response.text} '
-        #                                  f'with status code: {response.status_code}')
-        code_challenge = next(
-            (entry[1] for entry in parse_qsl(urlparse(self._challenge_redirect).query) if entry[0] == 'code_challenge'))
+    @staticmethod
+    def _get_root_login_parameters(metadata_manager,  # pylint: disable=too-many-arguments
+                                   email,
+                                   csrf_token,
+                                   session_id,
+                                   challenge_redirect,
+                                   password,
+                                   mfa_type,
+                                   mfa_serial):
+        code_challenge = next((entry[1] for entry in parse_qsl(urlparse(challenge_redirect).query)
+                               if entry[0] == 'code_challenge'))
         parameters = {'action': 'authenticateRoot',
                       'email': email,
                       'password': password,
-                      'redirect_uri': 'https://console.aws.amazon.com/console/home?hashArgs=%23&isauthcode=true&nc2=h_ct&src=header-signin&state=hashArgsFromTB_eu-north-1_8507e4d5162f4752',
+                      'redirect_uri': 'https://console.aws.amazon.com/console/home?hashArgs=%23&isauthcode=true&'
+                                      'nc2=h_ct&src=header-signin&state=hashArgsFromTB_eu-north-1_f4f70b834bfa25f4',
                       'client_id': 'arn:aws:signin:::console/canvas',
-                      'csrf': self._csrf_token,
-                      'sessionId': self._session_id,
-                      # 'metadata1': MetadataManager(self.user_agent).get_random_metadata(self._challenge_redirect),
-                      'metadata1': self._metadata_manager.get_random_metadata(self._challenge_redirect),
+                      'csrf': csrf_token,
+                      'sessionId': session_id,
+                      'metadata1': metadata_manager.get_random_metadata(challenge_redirect),
                       'rememberMfa': False,
                       'code_challenge': code_challenge,
                       'code_challenge_method': 'SHA-256',
                       'mfaSerial': ''}
-
-        # if captcha_url is not None:
-        #     parameters['captcha_status_token'] = captcha_status_token
-
         if mfa_type:
             totp = TOTP(mfa_serial)
             parameters.update({'mfaType': mfa_type,
                                'mfa1': totp.now()})
-        headers = {'X-Requested-With': 'XMLHttpRequest'}
+        return parameters
+
+    # pylint: disable=too-many-locals
+    @staticmethod
+    def get_root_console_session(solver, metadata_manager, email, password, mfa_serial=None):
+        session = AwsSession()
+        csrf_token, session_id, challenge_redirect, oauth_redirect = RootAuthenticator.parse_home_page_redirects(session)
+        mfa_type = RootAuthenticator._validate_mfa_type(session, email, mfa_serial)
+        arguments = {'metadata_manager': metadata_manager,
+                     'email': email,
+                     'csrf_token': csrf_token,
+                     'session_id': session_id,
+                     'challenge_redirect': challenge_redirect}
+        RootAuthenticator.resolve_account_type(session=session,
+                                               **arguments,
+                                               oauth_redirect=oauth_redirect,
+                                               solver=solver)
+        parameters = RootAuthenticator._get_root_login_parameters(**arguments,
+                                                                  password=password,
+                                                                  mfa_type=mfa_type,
+                                                                  mfa_serial=mfa_serial)
+        headers = {'X-Requested-With': 'XMLHttpRequest',
+                   'Referer': challenge_redirect}
         count = 0
         while True:
             count += 1
-            self.logger.debug(f'Connecting to url {self._signin_url} with data: {parameters} and headers:{headers}')
-            response = self.session.post(self._signin_url, data=parameters, headers=headers)
-            success = self._validate_response(response)
-            if all([success,
-                    response.json().get('properties', {}).get('CaptchaURL') is not None]):
-                response = self._process_after_login_captcha(parameters, response)
-                success = self._validate_response(response)
+            LOGGER.debug(f'Connecting to url {Urls.signing_service} with data: {parameters} and headers:{headers}')
+            response = session.post(Urls.signing_service, data=parameters, headers=headers)
+            success = RootAuthenticator.validate_response(response)
+            if all([success, response.json().get('properties', {}).get('CaptchaURL') is not None]):
+                response = RootAuthenticator._process_after_login_captcha(solver, session, parameters, response)
+                success = RootAuthenticator.validate_response(response)
             redirect = response.json().get('properties', {}).get('RedirectTo')
-            if redirect:
+            if any([redirect, count == 3]):
                 break
-            if count == 3:
-                break
-        if not all([success,
-                    redirect is not None]):
+        if not all([success, redirect is not None]):
+            LOGGER.error(f'Found an unexpected redirect {redirect}.')
             raise InvalidAuthentication(f'Unable to authenticate, response received was: {response.text} '
                                         f'with status code: {response.status_code}')
-        return redirect
+        response = session.get(redirect)
+        if not response.ok:
+            LOGGER.error(f'Received broken response: {response.text}')
+            raise InvalidAuthentication('Unable to get a valid authenticated session for root console.')
+        return session
 
-    def _get_billing_session(self, email, password, region, mfa_serial=None):  # pylint: disable=too-many-arguments
-        # mfa_serial=None):  # pylint: disable=too-many-arguments
-        # session = Session()
-        redirect_url = self._get_root_console_redirect(email, password, mfa_serial=mfa_serial)
-        authenticator = RootAuthenticator(self.session, region=region)
-        return authenticator.get_billing_root_session(redirect_url)  # , unfiltered_session=unfiltered_session)
+    def get_billing_root_session(self, email, password, mfa_serial=None):
+        """Retrieves a root user billing session.
 
-    def _get_iam_session(self, email, password, region, mfa_serial=None):
-        # session = Session()
-        redirect_url = self._get_root_console_redirect(email, password, mfa_serial=mfa_serial)
-        authenticator = RootAuthenticator(self.session, region=region)
-        return authenticator.get_iam_root_session(redirect_url)
+        Args:
+            email (str): The email of the root user.
+            password (str): The password of the root user.
+            mfa_serial (str): The mfa seed if mfa is set.
+
+        Returns:
+            session (Session): A valid session.
+
+        """
+        session = RootAuthenticator.get_root_console_session(self._solver,
+                                                             self.metadata_manager,
+                                                             email,
+                                                             password,
+                                                             mfa_serial)
+        session.get(Urls.billing_home)
+        session.allow_redirects = False
+        hash_args = session.get(Urls.billing_home, params={'state': 'hashArgs#'})
+        session.get(hash_args.headers.get('Location'))
+        session.allow_redirects = True
+        dashboard = session.get(Urls.global_billing_home,
+                                params={'state': 'hashArgs#', 'skipRegion': 'true',
+                                        'region': 'us-east-1'})
+        csrf_token_data = CsrfTokenData(entity_type='input',
+                                        attributes={'id': 'xsrfToken'},
+                                        attribute_value='value',
+                                        headers_name='x-awsbc-xsrf-token')
+
+        return session.get_console_session(dashboard, csrf_token_data)
+
+    def get_iam_root_session(self, email, password, mfa_serial=None):
+        """Retrieves an iam console session, filtered with specific cookies or not depending on the usage.
+
+        Args:
+            email (str): The email of the root user.
+            password (str): The password of the root user.
+            mfa_serial (str): The mfa seed if mfa is set.
+
+        Returns:
+            session (Session): A valid session.
+
+        """
+        session = RootAuthenticator.get_root_console_session(self._solver,
+                                                             self.metadata_manager,
+                                                             email,
+                                                             password,
+                                                             mfa_serial)
+        session.get(Urls.iam_home_use2)
+        session.allow_redirects = False
+        hash_args = session.get(Urls.iam_home_use2, params={'state': 'hashArgs#'})
+        session.get(hash_args.headers.get('Location'))
+        session.allow_redirects = True
+        dashboard = session.get(Urls.global_iam_home,
+                                params={'state': 'hashArgs#', 'skipRegion': 'true',
+                                        'region': 'us-east-1'})
+        csrf_token_data = CsrfTokenData(entity_type='meta',
+                                        attributes={'id': 'xsrf-token'},
+                                        attribute_value='data-token',
+                                        headers_name='X-CSRF-TOKEN')
+        return session.get_console_session(dashboard, csrf_token_data)
+
+    @staticmethod
+    def parse_home_page_redirects(session):
+        for url in [Urls.root, Urls.console_home]:
+            LOGGER.debug(f'Trying to get {url} for all initial cookies.')
+            session.get(url)
+        # TODO error checking.
+        params = {'nc2': 'h_ct',
+                  'src': 'header-signin',
+                  'hashArgs': '%23'}
+        response = session.get(f'{Urls.console_home}', params=params)
+        if not response.ok:
+            LOGGER.debug(
+                f'Request failed with response status: {response.status_code} and text: {response.content}')
+            raise ServerError('Unable to get initial pages!')
+        soup = Bfs(response.text, features='html.parser')
+        session_id = soup.find('meta', {'name': 'session_id'}).get('content')
+        csrf_token = soup.find('meta', {'name': 'csrf_token'}).get('content')
+        oauth_redirect = response.history[-3].headers.get('Location')
+        challenge_redirect = response.history[-1].headers.get('Location')
+        return csrf_token, session_id, challenge_redirect, oauth_redirect
+
+    @staticmethod
+    def get_captcha_info(response):
+        try:
+            properties = response.json().get('properties', {})
+            url = properties.get('CaptchaURL')
+            captcha_token = properties.get('CES')
+            captcha_obfuscation_token = properties.get('captchaObfuscationToken')
+            return Captcha(url, captcha_token, captcha_obfuscation_token)
+        except ValueError:
+            raise InvalidAuthentication(response.text) from None
+
+    @staticmethod
+    def update_parameters_with_captcha(solver, parameters, response):
+        captcha = RootAuthenticator.get_captcha_info(response)
+        parameters.update({'captcha_guess': solver.solve(captcha.url),
+                           'captcha_token': captcha.token,
+                           'captchaObfuscationToken': captcha.obfuscation_token})
+        return parameters
+
+    @staticmethod
+    def validate_response(response):
+        if not response.ok:
+            LOGGER.debug(f'Response failed with text: {response.text} and status code {response.status_code}')
+            return False
+        try:
+            success = any([response.json().get('state', '') == 'SUCCESS',
+                           response.json().get('properties', {}).get('CaptchaURL')])
+            if response.json().get('properties', {}).get('recovery_result', '') == 'wrong_captcha':
+                raise InvalidCaptcha(response.json())
+            if response.json().get('properties', {}).get('Title', '') == 'Authentication failed':
+                raise InvalidAuthentication(response.json())
+        except AttributeError:
+            LOGGER.debug(f'Response failed with text: {response.text} and status code {response.status_code}')
+            success = False
+        return success
+
+    # pylint: disable=too-many-arguments,unused-argument
+    @staticmethod
+    def resolve_account_type(session,
+                             metadata_manager,
+                             email,
+                             csrf_token,
+                             session_id,
+                             challenge_redirect,
+                             oauth_redirect,
+                             solver):
+        response = RootAuthenticator.resolve_account_type_response(**locals())
+        success = RootAuthenticator.validate_response(response)
+        if not success:
+            raise UnableToResolveAccount(f'Failed to resolve account type with response: {response.text} '
+                                         f'and status code {response.status_code}')
+        LOGGER.debug(f'Resolved account type successfully with response :{response.text}')
+        return success
+
+    @staticmethod
+    def resolve_account_type_response(session,
+                                      metadata_manager,
+                                      email,
+                                      csrf_token,
+                                      session_id,
+                                      challenge_redirect,
+                                      oauth_redirect,
+                                      solver):
+        parameters = {'action': 'resolveAccountType',
+                      'redirect_uri': challenge_redirect,
+                      'email': email,
+                      'metadata1': metadata_manager.get_random_metadata(oauth_redirect),
+                      'csrf': csrf_token,
+                      'sessionId': session_id}
+        headers = {'X-Requested-With': 'XMLHttpRequest'}
+        response = session.post(Urls.signing_service, data=parameters, headers=headers)
+        LOGGER.debug(f'Received response {response.text} with status code {response.status_code}')
+        if not response.ok:
+            LOGGER.warning(f'Request failed with response: {response.text} and status: {response.status_code}')
+        if response.json().get('properties', {}).get('CaptchaURL') is None:
+            LOGGER.debug('No Captcha information found.')
+            return response
+        LOGGER.debug('Getting the resolve account type captcha.')
+        LOGGER.debug(f'Received response {response.text} with status code {response.status_code}')
+        parameters = RootAuthenticator.update_parameters_with_captcha(solver, parameters, response)
+        return session.post(Urls.signing_service, data=parameters, headers=headers)
+
+    @staticmethod
+    def _process_after_login_captcha(solver, session, parameters, response):
+        LOGGER.debug('Getting the after login type captcha.')
+        parameters = RootAuthenticator.update_parameters_with_captcha(solver, parameters, response)
+        headers = {'X-Requested-With': 'XMLHttpRequest'}
+        LOGGER.debug(f'Connecting to url {Urls.signing_service} with data: {parameters} and headers:{headers}')
+        return session.post(Urls.signing_service, data=parameters, headers=headers)
 
 
-class PasswordManager(BaseConsoleInterface):
+class PasswordManager(LoggerMixin):
     """Models interaction for account password reset."""
 
-    @retry(retry_on_exceptions=InvalidCaptcha, max_calls_total=3, retry_window_after_first_call_in_seconds=15)
+    def __init__(self, solver=CONSOLE_SOLVER, user_agent=RANDOM_USER_AGENT):
+        self._solver = solver()
+        if not isinstance(self._solver, Solver):
+            raise NotSolverInstance
+        self._user_agent = user_agent
+
+    @retry(retry_on_exceptions=InvalidCaptcha, max_calls_total=5, retry_window_after_first_call_in_seconds=120)
     def request_password_reset(self, email):
         """Requests a password reset for an account by its email.
 
@@ -697,33 +608,32 @@ class PasswordManager(BaseConsoleInterface):
 
         """
         self.logger.debug(f'Trying to resolve account type for email :{email}')
-
-        # urls = Urls('us-east-1')
-        # _ = self.session.get(urls.regional_console_home, params={'hashArgs': '#a', 'region': 'us-east-1'})
-
+        session = AwsSession()
+        authenticator = RootAuthenticator(self._solver, self._user_agent)
         try:
-            self._resolve_account_type(email)
+            secrets = authenticator.parse_home_page_redirects(session)
+            authenticator.resolve_account_type(session, authenticator.metadata_manager, email, *secrets, self._solver)
         except UnableToResolveAccount:
             raise UnableToRequestResetPassword(f'Could not resolve account type for email: {email}') from None
         parameters = {'action': 'captcha',
                       'forgotpassword': True,
-                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
+                      'csrf': session.cookies.get('aws-signin-csrf', path='/signin')}
         self.logger.debug('Starting the forgot password workflow.')
-        response = self.session.post(self._signin_url, data=parameters)
+        response = session.post(Urls.signing_service, data=parameters)
         parameters = {'action': 'getResetPasswordToken',
                       'email': email,
-                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/signin')}
+                      'csrf': session.cookies.get('aws-signin-csrf', path='/signin')}
         self.logger.debug('Getting password reset captcha.')
-        parameters = self._update_parameters_with_captcha(parameters, response)
+        parameters = authenticator.update_parameters_with_captcha(self._solver, parameters, response)
         self.logger.debug('Requesting to reset the password.')
-        response = self.session.post(self._signin_url, data=parameters)
-        success = self._validate_response(response)
-        if not success:
+        response = session.post(Urls.signing_service, data=parameters)
+        if not authenticator.validate_response(response):
             raise UnableToRequestResetPassword(response.text)
+        self.logger.debug(f'Request responded to with text: {response.text} and status code {response.status_code}')
         self.logger.info('Requested password reset successfully')
         return True
 
-    @retry(retry_on_exceptions=InvalidCaptcha, max_calls_total=3, retry_window_after_first_call_in_seconds=15)
+    @retry(retry_on_exceptions=InvalidCaptcha, max_calls_total=5, retry_window_after_first_call_in_seconds=120)
     def reset_password(self, reset_url, password):
         """Resets password of an aws account.
 
@@ -738,35 +648,38 @@ class PasswordManager(BaseConsoleInterface):
             UnableToResetPassword on failure
 
         """
-        parsed_url = dict(urllib.parse.parse_qsl(reset_url))
-        _ = self.session.get(reset_url)
+        session = AwsSession()
+        parsed_url = dict(parse_qsl(reset_url))
+        session.get(reset_url)
         parameters = {'action': 'resetPasswordSubmitForm',
                       'confirmpassword': password,
                       'key': parsed_url.get('key'),
                       'newpassword': password,
                       'token': parsed_url.get('token'),
                       'type': 'RootUser',
-                      'csrf': self.session.cookies.get('aws-signin-csrf', path='/resetpassword')}
-        response = self.session.post(self._reset_url, data=parameters)
-        success = self._validate_response(response)
+                      'csrf': session.cookies.get('aws-signin-csrf', path='/resetpassword')}
+        response = session.post(Urls.password_reset, data=parameters)
+        success = RootAuthenticator.validate_response(response)
         if not success:
             raise UnableToResetPassword(response.text)
+        self.logger.debug(f'Request responded with text: {response.text} and status code {response.status_code}')
         self.logger.info('Password reset successful')
         return True
 
 
-class AccountManager(BaseConsoleInterface):
+class AccountManager(LoggerMixin):
     """Models basic communication with the server for account and password management."""
 
     # pylint: disable=too-many-arguments
-    def __init__(self, email, password, region, mfa_serial=None, solver=CONSOLE_SOLVER):
-        BaseConsoleInterface.__init__(self, solver=solver)
+    def __init__(self, email, password, region, mfa_serial=None, solver=CONSOLE_SOLVER, user_agent=RANDOM_USER_AGENT):
         self.email = email
         self.password = password
         self.region = region
-        self.mfa_serial = mfa_serial
-        self._mfa_manager = None
-        self._iam_access = None
+        self._mfa_serial = mfa_serial
+        self._solver = solver
+        self._user_agent = user_agent
+        self._iam = None
+        self._mfa = None
         self._account_id = None
 
     def terminate_account(self):
@@ -776,13 +689,11 @@ class AccountManager(BaseConsoleInterface):
             True on success, False otherwise.
 
         """
-        termination_url = f'{Urls.billing_rest}/v1.0/account'
-        session = self._get_billing_session(self.email,
-                                            self.password,
-                                            self.region,
-                                            # unfiltered_session=False,
-                                            mfa_serial=self.mfa_serial)
-        response = session.put(termination_url)
+        authenticator = RootAuthenticator(self._solver, self._user_agent)
+        session = authenticator.get_billing_root_session(self.email,
+                                                         self.password,
+                                                         mfa_serial=self._mfa_serial)
+        response = session.put(Urls.account_management)
         if not response.ok:
             self.logger.error(f'Unsuccessful response received: {response.text} '
                               f'with status code: {response.status_code}')
@@ -827,22 +738,20 @@ class AccountManager(BaseConsoleInterface):
         return success
 
     def _update_account(self, payload):
-        update_url = f'{self._update_url}?redirect_uri={Urls.billing_home}#/account'
-        session = self._get_billing_session(self.email,
-                                            self.password,
-                                            self.region,
-                                            # unfiltered_session=True,
-                                            mfa_serial=self.mfa_serial)
-        response = session.get(update_url)
+        authenticator = RootAuthenticator(self._solver, self._user_agent)
+        session = authenticator.get_billing_root_session(self.email,
+                                                         self.password,
+                                                         mfa_serial=self._mfa_serial)
+        params = {'redirect_uri': Urls.billing_home_account}
+        response = session.get(Urls.account_update, params=params)
         if not response.ok:
             raise ServerError(f'Unsuccessful response received: {response.text} '
                               f'with status code: {response.status_code}')
         headers = {'X-Requested-With': 'XMLHttpRequest'}
-        payload_ = {'redirect_uri': f'{Urls.billing_home}#/account',
-                    'csrf': response.cookies.get('aws-signin-csrf', path='/updateaccount')}
-        payload_.update(payload)
-        response = session.post(self._update_url, headers=headers, data=payload_)
-        success = self._validate_response(response)
+        params.update(**{'csrf': response.cookies.get('aws-signin-csrf', path='/updateaccount')},
+                      **payload)
+        response = session.post(Urls.account_update, headers=headers, data=params)
+        success = authenticator.validate_response(response)
         if not success:
             raise UnableToUpdateAccount(response.text)
         self.logger.info('Account information updated successfully')
@@ -856,34 +765,34 @@ class AccountManager(BaseConsoleInterface):
             mfa_manager (MfaManager): The mfa manager object
 
         """
-        if self._mfa_manager is None:
-            session = self._get_iam_session(self.email, self.password, self.region, self.mfa_serial)
-            self._mfa_manager = MfaManager(session)
-        return self._mfa_manager
+        if self._mfa is None:
+            authenticator = RootAuthenticator(self._solver, self._user_agent)
+            session = authenticator.get_iam_root_session(self.email,
+                                                         self.password,
+                                                         mfa_serial=self._mfa_serial)
+            self._mfa = MfaManager(session)
+        return self._mfa
 
     @property
     def iam(self):
         """IAM."""
-        if self._iam_access is None:
-            session = self._get_billing_session(self.email,
-                                                self.password,
-                                                self.region,
-                                                # unfiltered_session=False,
-                                                mfa_serial=self.mfa_serial)
-            self._iam_access = IamAccess(session)
-        return self._iam_access
+        if self._iam is None:
+            authenticator = RootAuthenticator(self._solver, self._user_agent)
+            session = authenticator.get_billing_root_session(self.email,
+                                                             self.password,
+                                                             mfa_serial=self._mfa_serial)
+            self._iam = IamAccess(session)
+        return self._iam
 
     @property
     def account_id(self):
         """IAM."""
         if self._account_id is None:
-            account_url = f'{Urls.billing_rest}/v1.0/account'
-            session = self._get_billing_session(self.email,
-                                                self.password,
-                                                self.region,
-                                                # unfiltered_session=False,
-                                                mfa_serial=self.mfa_serial)
-            response = session.get(account_url)
+            authenticator = RootAuthenticator(self._solver, self._user_agent)
+            session = authenticator.get_billing_root_session(self.email,
+                                                             self.password,
+                                                             mfa_serial=self._mfa_serial)
+            response = session.get(Urls.account_management)
             if not response.ok:
                 self.logger.error(f'Unsuccessful response received: {response.text} '
                                   f'with status code: {response.status_code}')

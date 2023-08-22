@@ -27,7 +27,7 @@
 Custom exception code for awsapilib.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
@@ -40,3 +40,19 @@ __license__ = '''MIT'''
 __maintainer__ = '''Costas Tyfoxylos'''
 __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
+
+
+class NoSigninTokenReceived(Exception):
+    """No Signing token was received."""
+
+
+class InvalidCredentials(Exception):
+    """No credentials or the credentials provided are not correct."""
+
+
+class ExpiredCredentials(Exception):
+    """Credentials used to assume the role has expired."""
+
+
+class UnexpectedResponse(Exception):
+    """The response received was not expected at that stage of the interaction."""

@@ -29,7 +29,7 @@ sso package.
 Import all parts from sso here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
 from .sso import Sso
 from .ssoexceptions import (UnsupportedTarget,

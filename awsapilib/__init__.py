@@ -29,15 +29,15 @@ awsapilib package.
 Import all parts from awsapilib here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
 from ._version import __version__
-from .authentication import LoggerMixin, Authenticator
-from .controltower import ControlTower
+from .authentication import AssumedRoleAuthenticator
 from .billing import Billing
-from .sso import Sso
 from .cloudformation import Cloudformation
-from .console import AccountManager, PasswordManager
+# from .console import AccountManager, PasswordManager
+from .controltower import ControlTower
+from .sso import Sso
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -51,11 +51,10 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 # This is to 'use' the module(s), so lint doesn't complain
 assert __version__
 
-assert LoggerMixin
-assert Authenticator
+assert AssumedRoleAuthenticator
 assert ControlTower
 assert Billing
 assert Sso
 assert Cloudformation
-assert AccountManager
-assert PasswordManager
+# assert AccountManager
+# assert PasswordManager

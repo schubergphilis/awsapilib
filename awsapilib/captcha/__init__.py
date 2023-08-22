@@ -29,7 +29,7 @@ captcha package.
 Import all parts from captcha here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
 from .captcha import Solver, Iterm, Terminal, Captcha2
 from .captchaexceptions import CaptchaError, UnsupportedTerminal, InvalidOrNoBalanceApiToken

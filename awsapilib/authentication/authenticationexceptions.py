@@ -27,7 +27,7 @@
 Custom exception code for authentication.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
@@ -42,13 +42,5 @@ __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 
-class NoSigninTokenReceived(Exception):
-    """No Signing token was received."""
-
-
-class InvalidCredentials(Exception):
-    """No credentials or the credentials provided are not correct."""
-
-
-class ExpiredCredentials(Exception):
-    """Credentials used to assume the role has expired."""
+class InvalidArn(Exception):
+    """The arn provided is not correct."""

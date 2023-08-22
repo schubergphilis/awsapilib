@@ -26,14 +26,14 @@
 Main code for entities.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
 import logging
 import json
 
-from awsapilib.authentication import LoggerMixin
+from awsapilib.awsapilib import LoggerMixin
 
 __author__ = '''Sayantan Khanra <skhanra@schubergphilis.com>, Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''

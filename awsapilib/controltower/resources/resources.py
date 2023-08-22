@@ -29,12 +29,12 @@ resources module.
 Import all parts from resources here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
 
 from time import sleep
 
-from awsapilib.authentication import LoggerMixin
+from awsapilib.awsapilib import LoggerMixin
 from awsapilib.controltower.controltowerexceptions import (NonExistentSCP,
                                                            ControlTowerBusy,
                                                            NoSuspendedOU)

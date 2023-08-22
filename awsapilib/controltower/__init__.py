@@ -29,7 +29,7 @@ controltower module.
 Import all parts from controltower here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
 from .controltowerexceptions import (UnsupportedTarget,
                                      OUCreating,

@@ -27,7 +27,7 @@
 Main code for captcha.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
@@ -40,21 +40,21 @@ import requests
 from twocaptcha import TwoCaptcha, ValidationException, TimeoutException
 from twocaptcha.api import ApiException, NetworkException
 
-from awsapilib.authentication import LoggerMixin
+from awsapilib.awsapilib import LoggerMixin
 from .captchaexceptions import CaptchaError, UnsupportedTerminal, InvalidOrNoBalanceApiToken
 
-__author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
-__docformat__ = '''google'''
-__date__ = '''30-06-2021'''
-__copyright__ = '''Copyright 2021, Costas Tyfoxylos'''
+__author__ = 'Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'
+__docformat__ = 'google'
+__date__ = '30-06-2021'
+__copyright__ = 'Copyright 2021, Costas Tyfoxylos'
 __credits__ = ["Costas Tyfoxylos"]
-__license__ = '''MIT'''
-__maintainer__ = '''Costas Tyfoxylos'''
-__email__ = '''<ctyfoxylos@schubergphilis.com>'''
-__status__ = '''Development'''  # "Prototype", "Development", "Production".
+__license__ = 'MIT'
+__maintainer__ = 'Costas Tyfoxylos'
+__email__ = '<ctyfoxylos@schubergphilis.com>'
+__status__ = 'Development'  # "Prototype", "Development", "Production".
 
 # This is the main prefix used for logging
-LOGGER_BASENAME = '''captcha'''
+LOGGER_BASENAME = __name__
 LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 

@@ -27,7 +27,7 @@
 Main code for controltower.
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 
 """
 
@@ -52,7 +52,8 @@ from cachetools import TTLCache
 from cachetools import cached
 from opnieuw import retry
 
-from awsapilib.authentication import Authenticator, LoggerMixin
+from awsapilib.awsapilib import LoggerMixin
+from awsapilib.authentication import AssumedRoleAuthenticator
 from .controltowerexceptions import (UnsupportedTarget,
                                      OUCreating,
                                      NoServiceCatalogAccess,
@@ -140,10 +141,12 @@ class ControlTower(LoggerMixin):
         return wrap
 
     def __init__(self, arn, settling_time=90, region=None):
-        self.aws_authenticator = Authenticator(arn, region=region)
+        self.aws_authenticator = AssumedRoleAuthenticator(arn, region=region)
         self.service_catalog: ServicecatalogClient = boto3.client('servicecatalog',
+                                                                  region_name=self.aws_authenticator.region,
                                                                   **self.aws_authenticator.assumed_role_credentials)
         self.organizations: OrganizationsClient = boto3.client('organizations',
+                                                               region_name=self.aws_authenticator.region,
                                                                **self.aws_authenticator.assumed_role_credentials)
 
         self._region = region

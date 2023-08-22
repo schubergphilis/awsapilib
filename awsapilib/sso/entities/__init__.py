@@ -29,7 +29,7 @@ entities package.
 Import all parts from entities here
 
 .. _Google Python Style Guide:
-   http://google.github.io/styleguide/pyguide.html
+   https://google.github.io/styleguide/pyguide.html
 """
 from .entities import Account, Group, User, PermissionSet
 
