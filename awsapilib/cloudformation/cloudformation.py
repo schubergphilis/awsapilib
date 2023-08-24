@@ -36,7 +36,7 @@ import logging
 from awsapilib.awsapilib import LoggerMixin
 from awsapilib.authentication import AssumedRoleAuthenticator
 
-from .cloudformationexceptions import ServerError
+from .cloudformationexceptions import UnexpectedResponse
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -49,7 +49,7 @@ __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is the main prefix used for logging
-LOGGER_BASENAME = '''cloudformation'''
+LOGGER_BASENAME = __name__
 LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
@@ -65,10 +65,10 @@ class Cloudformation(LoggerMixin):
     def _get_authenticated_session(self):
         return self.aws_authenticator.get_cloudformation_authenticated_session()
 
-    @property
-    def stacksets(self):
-        """Exposes the stacksets settings."""
-        return StackSet(self)
+    # @property
+    # def stacksets(self):
+    #     """Exposes the stacksets settings."""
+    #     return StackSet(self)
 
 
 class StackSet:
@@ -86,7 +86,7 @@ class StackSet:
         endpoint = 'describeOrganizationsTrustedAccess'
         response = self._cloudformation.session.get(f'{self._api_url}/{endpoint}', params=self._region_payload)
         if not response.ok:
-            raise ServerError(f'Error, response received : {response.text}')
+            raise UnexpectedResponse(f'Error, response received : {response.text}')
         return response.json().get('status') == 'ENABLED'
 
     @organizations_trusted_access.setter
@@ -120,5 +120,5 @@ class StackSet:
                                                      params=self._region_payload,
                                                      json={})
         if any([not response.ok, 'Error' in response.json()]):
-            raise ServerError(f'Error, response received : {response.text}')
+            raise UnexpectedResponse(f'Error, response received : {response.text}')
         return True

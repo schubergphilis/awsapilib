@@ -42,5 +42,5 @@ __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 
-class ServerError(Exception):
+class UnexpectedResponse(Exception):
     """The response was not successful."""

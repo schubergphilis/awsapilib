@@ -42,38 +42,6 @@ __email__ = '''<ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 
-class NotSolverInstance(Exception):
-    """The object provided was not of Solver type."""
-
-
-class InvalidAuthentication(Exception):
-    """The authentication did not succeed."""
-
-
-class ServerError(Exception):
-    """Unknown server error occured."""
-
-
-class UnableToResolveAccount(Exception):
-    """Unable to resolve the account type."""
-
-
-class UnableToUpdateAccount(Exception):
-    """Unable to update the account info."""
-
-
-class UnableToQueryMFA(Exception):
-    """Unable to query the account MFA info."""
-
-
-class NoMFAProvided(Exception):
-    """The account is MFA provided but no MFA serial was provided."""
-
-
-class UnsupportedMFA(Exception):
-    """The MFA enabled is not supported."""
-
-
 class UnableToRequestResetPassword(Exception):
     """The request to reset password did not work."""
 
@@ -98,29 +66,9 @@ class UnableToGetVirtualMFA(Exception):
     """The attempt to list a virtual mfa failed."""
 
 
+class UnableToUpdateAccount(Exception):
+    """The account could not be enabled."""
+
+
 class VirtualMFADeviceExists(Exception):
     """The device already exists."""
-
-
-class XXTEAException(Exception):
-    """XXTEA issue."""
-
-
-class InvalidMetadata(Exception):
-    """Metadata have not been accepted as valid."""
-
-
-class InvalidDecryption(Exception):
-    """Decryption did not seem to work correctly."""
-
-
-class EncryptionFailure(Exception):
-    """Encryption did not succeed."""
-
-
-class DecryptionFailure(Exception):
-    """Decryption did not succeed."""
-
-
-class InvalidCaptcha(Exception):
-    """Captcha provided was invalid."""

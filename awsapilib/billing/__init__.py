@@ -34,9 +34,9 @@ Import all parts from billing here
 from .billing import Billing
 from .billingexceptions import (InvalidCurrency,
                                 NonEditableSetting,
-                                ServerError,
                                 IAMAccessDenied,
                                 InvalidCountryCode)
+from .billingexceptions import UnexpectedResponse as BillingUnexpectedResponse
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -52,6 +52,6 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 assert Billing
 assert InvalidCurrency
 assert NonEditableSetting
-assert ServerError
+assert BillingUnexpectedResponse
 assert IAMAccessDenied
 assert InvalidCountryCode

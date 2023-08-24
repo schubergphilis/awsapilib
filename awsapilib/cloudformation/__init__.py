@@ -32,7 +32,7 @@ Import all parts from billing here
    https://google.github.io/styleguide/pyguide.html
 """
 from .cloudformation import Cloudformation
-from .cloudformationexceptions import ServerError
+from .cloudformationexceptions import UnexpectedResponse as CloudformationUnexpectedResponse
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -46,4 +46,4 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 # This is to 'use' the module(s), so lint doesn't complain
 
 assert Cloudformation
-assert ServerError
+assert CloudformationUnexpectedResponse

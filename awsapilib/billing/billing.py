@@ -32,33 +32,31 @@ Main code for billing.
 """
 
 import logging
-import time
 from datetime import datetime, timedelta
 
 from bs4 import BeautifulSoup as Bfs
 
-from awsapilib.awsapilib import LoggerMixin
 from awsapilib.authentication import AssumedRoleAuthenticator
-from awsapilib.awsapilibexceptions import InvalidCredentials
-
+from awsapilib.authentication.authenticationexceptions import InvalidCredentials
+from awsapilib.awsapilib import LoggerMixin
 from .billingexceptions import (InvalidCountryCode,
                                 NonEditableSetting,
                                 IAMAccessDenied,
-                                InvalidCurrency,
-                                ServerError)
+                                # InvalidCurrency,
+                                UnexpectedResponse)
 
-__author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
-__docformat__ = '''google'''
-__date__ = '''30-03-2021'''
-__copyright__ = '''Copyright 2021, Costas Tyfoxylos'''
+__author__ = 'Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'
+__docformat__ = 'google'
+__date__ = '30-03-2021'
+__copyright__ = 'Copyright 2021, Costas Tyfoxylos'
 __credits__ = ["Costas Tyfoxylos"]
-__license__ = '''MIT'''
-__maintainer__ = '''Costas Tyfoxylos'''
-__email__ = '''<ctyfoxylos@schubergphilis.com>'''
-__status__ = '''Development'''  # "Prototype", "Development", "Production".
+__license__ = 'MIT'
+__maintainer__ = 'Costas Tyfoxylos'
+__email__ = '<ctyfoxylos@schubergphilis.com>'
+__status__ = 'Development'  # "Prototype", "Development", "Production".
 
 # This is the main prefix used for logging
-LOGGER_BASENAME = '''billing'''
+LOGGER_BASENAME = __name__
 LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
@@ -294,35 +292,35 @@ class Billing(LoggerMixin):
         """
         return Preferences(self)
 
-    @property
-    def currency(self):
-        """Currency settings.
-
-        Returns:
-            currency (str): The currency set.
-
-        """
-        url = f'{self.rest_api}/account/fxpaymentinfopapyrus'
-        response = self.session.get(url)
-        if not response.ok:
-            self.logger.error(f'Failed to retrieve currency setting, response: {response.text}')
-            return None
-        return response.json().get('currencyPreference')
-
-    @currency.setter
-    def currency(self, value):
-        """Setter for currency settings.
-
-        Returns:
-            None
-
-        """
-        url = f'{self.rest_api}/account/currencypreference'
-        response = self.session.put(url, json=value.upper())
-        if not response.ok:
-            if response.json().get('type') == 'InvalidParameterException':
-                raise InvalidCurrency(value)
-            self.logger.error(f'Failed to set currency setting, response: {response.text}')
+    # @property
+    # def currency(self):
+    #     """Currency settings.
+    #
+    #     Returns:
+    #         currency (str): The currency set.
+    #
+    #     """
+    #     url = f'{self.rest_api}/account/fxpaymentinfopapyrus'
+    #     response = self.session.get(url)
+    #     if not response.ok:
+    #         self.logger.error(f'Failed to retrieve currency setting, response: {response.text}')
+    #         return None
+    #     return response.json().get('currencyPreference')
+    #
+    # @currency.setter
+    # def currency(self, value):
+    #     """Setter for currency settings.
+    #
+    #     Returns:
+    #         None
+    #
+    #     """
+    #     url = f'{self.rest_api}/account/currencypreference'
+    #     response = self.session.put(url, json=value.upper())
+    #     if not response.ok:
+    #         if response.json().get('type') == 'InvalidParameterException':
+    #             raise InvalidCurrency(value)
+    #         self.logger.error(f'Failed to set currency setting, response: {response.text}')
 
     def _validate_iam_access(self):
         url = f'{self.rest_api}/account/iamaccess'
@@ -373,33 +371,33 @@ class Billing(LoggerMixin):
         return [region.get('regionName') for region in self._region_states
                 if region.get('regionState') == 'DISABLED']
 
-    @property
-    def payment_cards(self):
-        """Payment cards."""
-        if self._payment_instrument_ids is None:
-            url = 'https://console.aws.amazon.com/billing/rest/ppg-proxy'
-            headers = {'x-requested-with': 'XMLHttpRequest',
-                       'Operation': 'AWSPaymentPreferenceGateway.Get'}
-            payload = {'content': {'Input': {'arn': f'arn:aws:payments:us-east-1:{self.account_id}:'
-                                                    f'paymentpreference:PaymentInstrument'},
-                                   'Operation': 'com.amazon.aws.payments.gateway.coral.'
-                                                'paymentpreference.operations#Get',
-                                   'Service': 'com.amazon.aws.payments.gateway.coral.paymentpreference.'
-                                              'service#AWSPaymentPreferenceGateway'},
-                       'headers': {'Content-Type': 'application/json',
-                                   'X-Amz-Date': time.strftime("%a, %d %b %Y %I:%M:%S %Z", time.gmtime()),
-                                   'X-Amz-Target': 'AWSPaymentPreferenceGateway.Get'},
-                       'region': 'us-east-1'}
-            response = self.session.post(url, headers=headers, json=payload)
-            if response.status_code == 401:
-                raise InvalidCredentials
-            if not response.ok:
-                self.logger.error(f'Could not retrieve payment instrument id, response: {response.text}')
-                raise ServerError
-            metadata = response.json().get('Output', {}).get('paymentPreferenceWithMetadata', {})
-            self._payment_instrument_ids = [PaymentCard(self, data)
-                                            for data in metadata.get('value', {}).get('chargeInstruments', [])]
-        return self._payment_instrument_ids
+    # @property
+    # def payment_cards(self):
+    #     """Payment cards."""
+    #     if self._payment_instrument_ids is None:
+    #         url = 'https://console.aws.amazon.com/billing/rest/ppg-proxy'
+    #         headers = {'x-requested-with': 'XMLHttpRequest',
+    #                    'Operation': 'AWSPaymentPreferenceGateway.Get'}
+    #         payload = {'content': {'Input': {'arn': f'arn:aws:payments:us-east-1:{self.account_id}:'
+    #                                                 f'paymentpreference:PaymentInstrument'},
+    #                                'Operation': 'com.amazon.aws.payments.gateway.coral.'
+    #                                             'paymentpreference.operations#Get',
+    #                                'Service': 'com.amazon.aws.payments.gateway.coral.paymentpreference.'
+    #                                           'service#AWSPaymentPreferenceGateway'},
+    #                    'headers': {'Content-Type': 'application/json',
+    #                                'X-Amz-Date': time.strftime("%a, %d %b %Y %I:%M:%S %Z", time.gmtime()),
+    #                                'X-Amz-Target': 'AWSPaymentPreferenceGateway.Get'},
+    #                    'region': 'us-east-1'}
+    #         response = self.session.post(url, headers=headers, json=payload)
+    #         if response.status_code == 401:
+    #             raise InvalidCredentials
+    #         if not response.ok:
+    #             self.logger.error(f'Could not retrieve payment instrument id, response: {response.text}')
+    #             raise ServerError
+    #         metadata = response.json().get('Output', {}).get('paymentPreferenceWithMetadata', {})
+    #         self._payment_instrument_ids = [PaymentCard(self, data)
+    #                                         for data in metadata.get('value', {}).get('chargeInstruments', [])]
+    #     return self._payment_instrument_ids
 
     @property
     def market_place_id(self):
@@ -411,7 +409,7 @@ class Billing(LoggerMixin):
                 raise InvalidCredentials
             if not response.ok:
                 self.logger.error(f'Could not retrieve market place id, response: {response.text}')
-                raise ServerError
+                raise UnexpectedResponse
             soup = Bfs(response.text, features="html.parser")
             self._marketplace_id = soup.find('input', {'id': 'marketPlace'}).attrs.get('value')
         return self._marketplace_id
@@ -440,7 +438,7 @@ class PaymentCard(LoggerMixin):
                 raise InvalidCredentials
             if not response.ok:
                 self.logger.error(f'Could not retrieve market place id, response: {response.text}')
-                raise ServerError
+                raise UnexpectedResponse
             self._data_ = response.json()
         return self._data_
 

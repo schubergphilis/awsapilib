@@ -33,16 +33,7 @@ Import all parts from console here
 """
 
 from .console import AccountManager, PasswordManager
-from .consoleexceptions import (NotSolverInstance,
-                                InvalidAuthentication,
-                                InvalidCaptcha,
-                                ServerError,
-                                UnableToResolveAccount,
-                                UnableToUpdateAccount,
-                                UnableToQueryMFA,
-                                NoMFAProvided,
-                                UnsupportedMFA,
-                                UnableToRequestResetPassword,
+from .consoleexceptions import (UnableToRequestResetPassword,
                                 UnableToResetPassword,
                                 UnableToCreateVirtualMFA,
                                 UnableToEnableVirtualMFA,
@@ -64,15 +55,6 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 assert AccountManager
 assert PasswordManager
 
-assert NotSolverInstance
-assert InvalidAuthentication
-assert InvalidCaptcha
-assert ServerError
-assert UnableToResolveAccount
-assert UnableToUpdateAccount
-assert UnableToQueryMFA
-assert NoMFAProvided
-assert UnsupportedMFA
 assert UnableToRequestResetPassword
 assert UnableToResetPassword
 assert UnableToCreateVirtualMFA

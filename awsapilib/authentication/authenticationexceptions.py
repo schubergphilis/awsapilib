@@ -44,3 +44,75 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 class InvalidArn(Exception):
     """The arn provided is not correct."""
+
+
+class XXTEAException(Exception):
+    """XXTEA issue."""
+
+
+class InvalidMetadata(Exception):
+    """Metadata have not been accepted as valid."""
+
+
+class InvalidDecryption(Exception):
+    """Decryption did not seem to work correctly."""
+
+
+class EncryptionFailure(Exception):
+    """Encryption did not succeed."""
+
+
+class DecryptionFailure(Exception):
+    """Decryption did not succeed."""
+
+
+class NoSigninTokenReceived(Exception):
+    """No Signing token was received."""
+
+
+class InvalidCredentials(Exception):
+    """No credentials or the credentials provided are not correct."""
+
+
+class ExpiredCredentials(Exception):
+    """Credentials used to assume the role has expired."""
+
+
+class UnexpectedResponse(Exception):
+    """The response received was not expected at that stage of the interaction."""
+
+
+class NotSolverInstance(Exception):
+    """The object provided was not of Solver type."""
+
+
+class InvalidAuthentication(Exception):
+    """The authentication did not succeed."""
+
+
+class ServerError(Exception):
+    """Unknown server error occured."""
+
+
+class UnableToResolveAccount(Exception):
+    """Unable to resolve the account type."""
+
+
+class UnableToUpdateAccount(Exception):
+    """Unable to update the account info."""
+
+
+class UnableToQueryMFA(Exception):
+    """Unable to query the account MFA info."""
+
+
+class NoMFAProvided(Exception):
+    """The account is MFA provided but no MFA serial was provided."""
+
+
+class UnsupportedMFA(Exception):
+    """The MFA enabled is not supported."""
+
+
+class InvalidCaptcha(Exception):
+    """Captcha provided was invalid."""

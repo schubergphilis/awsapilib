@@ -31,7 +31,27 @@ Import all parts from awsauthenticationlib here
 .. _Google Python Style Guide:
    https://google.github.io/styleguide/pyguide.html
 """
-from .authentication import AssumedRoleAuthenticator
+from .authentication import AssumedRoleAuthenticator, RootAuthenticator, AwsSession, CONSOLE_SOLVER
+from .authenticationexceptions import (InvalidArn,
+                                       XXTEAException,
+                                       InvalidMetadata,
+                                       InvalidDecryption,
+                                       EncryptionFailure,
+                                       DecryptionFailure,
+                                       NoSigninTokenReceived,
+                                       InvalidCredentials,
+                                       ExpiredCredentials,
+                                       UnexpectedResponse,
+                                       NotSolverInstance,
+                                       InvalidAuthentication,
+                                       UnableToResolveAccount,
+                                       UnableToUpdateAccount,
+                                       UnableToQueryMFA,
+                                       NoMFAProvided,
+                                       UnsupportedMFA,
+                                       InvalidCaptcha)
+
+from .authenticationexceptions import ServerError as AuthenticationUnexpectedResponse
 
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
@@ -44,3 +64,25 @@ __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is to 'use' the module(s), so lint doesn't complain
 assert AssumedRoleAuthenticator
+assert RootAuthenticator
+assert AwsSession
+assert CONSOLE_SOLVER
+assert InvalidArn
+assert XXTEAException
+assert InvalidMetadata
+assert InvalidDecryption
+assert EncryptionFailure
+assert DecryptionFailure
+assert NoSigninTokenReceived
+assert InvalidCredentials
+assert ExpiredCredentials
+assert UnexpectedResponse
+assert NotSolverInstance
+assert InvalidAuthentication
+assert UnableToResolveAccount
+assert UnableToUpdateAccount
+assert UnableToQueryMFA
+assert NoMFAProvided
+assert UnsupportedMFA
+assert InvalidCaptcha
+assert AuthenticationUnexpectedResponse

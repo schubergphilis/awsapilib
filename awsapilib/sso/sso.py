@@ -58,7 +58,7 @@ __email__ = '''<skhanra@schubergphilis.com>, <ctyfoxylos@schubergphilis.com>'''
 __status__ = '''Development'''  # "Prototype", "Development", "Production".
 
 # This is the main prefix used for logging
-LOGGER_BASENAME = '''sso'''
+LOGGER_BASENAME = __name__
 LOGGER = logging.getLogger(LOGGER_BASENAME)
 LOGGER.addHandler(logging.NullHandler())
 
@@ -185,16 +185,18 @@ class Sso(LoggerMixin):
 
         """
         if self._directory_id is None:
-            payload = self.get_api_payload(content_string={},
-                                           target='GetUserPoolInfo',
-                                           path='/userpool/',
-                                           x_amz_target='com.amazonaws.swbup.service.SWBUPService.GetUserPoolInfo',
-                                           region=self.aws_region)
-            self.logger.debug('Trying to get directory id for sso with payload: %s', payload)
-            response = self.session.post(f'{self.api_url}/userpool', json=payload)
+            url = 'https://sso.eu-west-1.amazonaws.com/'
+            # payload = self.get_api_payload(content_string={},
+            #                                target='GetUserPoolInfo',
+            #                                path='/userpool/',
+            #                                x_amz_target='com.amazonaws.swbup.service.SWBUPService.GetUserPoolInfo',
+            #                                region=self.aws_region)
+            # self.logger.debug('Trying to get directory id for sso with payload: %s', payload)
+            response = self.session.post(url, json={})
+            # response = self.session.post(f'{self.api_url}/userpool', json=payload)
             if not response.ok:
                 raise ValueError(response.text)
-            self._directory_id = response.json().get('DirectoryId')
+            self._directory_id = response.json()[0].get('IdentityStoreId')
         return self._directory_id
 
     @property

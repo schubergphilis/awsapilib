@@ -50,7 +50,7 @@ class InvalidCurrency(Exception):
     """The currency provided is not a valid value."""
 
 
-class ServerError(Exception):
+class UnexpectedResponse(Exception):
     """The response was not successful."""
 
 
