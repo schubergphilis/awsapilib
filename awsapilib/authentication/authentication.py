@@ -139,6 +139,7 @@ class AwsSession(Session):
         super().__init__()
         self.timeout = timeout
         self.allow_redirects = allow_redirects
+        self.headers.update({'User-Agent': RANDOM_USER_AGENT})
 
     def request(self,  # noqa
                 method,
@@ -199,8 +200,8 @@ class AwsSession(Session):
             If Tuple, ('cert', 'key') pair.
         :rtype: requests.Response
         """
-        headers = headers or {}
-        headers.update({'User-Agent': RANDOM_USER_AGENT})
+        # headers = headers or {}
+        # headers.update({'User-Agent': RANDOM_USER_AGENT})
         # Create the Request.
         req = Request(
             method=method.upper(),
