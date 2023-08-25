@@ -177,3 +177,13 @@ class Urls:
 
         """
         return f'{self.regional_cloudformation}/home'
+
+    @property
+    def regional_cloudformation_credentials(self):
+        """The url of the regional cloudformation service console credentials.
+
+        Returns:
+            regional_cloud_formation_credentials (str): The regional cloudformation console credentials url.
+
+        """
+        return f'{self.regional_cloudformation}/tb/creds'

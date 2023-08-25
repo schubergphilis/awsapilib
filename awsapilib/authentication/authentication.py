@@ -140,6 +140,7 @@ class AwsSession(Session):
         self.timeout = timeout
         self.allow_redirects = allow_redirects
         self.headers.update({'User-Agent': RANDOM_USER_AGENT})
+        self.x_amz_info = None
 
     def request(self,  # noqa
                 method,
@@ -200,8 +201,6 @@ class AwsSession(Session):
             If Tuple, ('cert', 'key') pair.
         :rtype: requests.Response
         """
-        # headers = headers or {}
-        # headers.update({'User-Agent': RANDOM_USER_AGENT})
         # Create the Request.
         req = Request(
             method=method.upper(),
@@ -503,6 +502,16 @@ class RootAuthenticator(LoggerMixin):
             raise InvalidAuthentication(response.text) from None
 
     @staticmethod
+    def get_x_amz_info(url):
+        parsed_query = dict(urllib.parse.parse_qsl(url))
+        return XAmz(parsed_query.get('X-Amz-Security-Token'),
+                    parsed_query.get('X-Amz-Date'),
+                    parsed_query.get('X-Amz-Algorithm'),
+                    parsed_query.get('X-Amz-Credential'),
+                    parsed_query.get('X-Amz-SignedHeaders'),
+                    parsed_query.get('X-Amz-Signature'))
+
+    @staticmethod
     def update_parameters_with_captcha(solver, parameters, response):
         captcha = RootAuthenticator.get_captcha_info(response)
         parameters.update({'captcha_guess': solver.solve(captcha.url),
@@ -681,14 +690,38 @@ class AssumedRoleAuthenticator(LoggerMixin):
             session (AwsSession): An authenticated session with headers and cookies set.
 
         """
-        url = self.urls.regional_single_sign_on_home
-        params = {'region': self.region, 'hashArgs': '#'}
-        csrf_token_data = CsrfTokenData(entity_type='meta',
-                                        attributes={'name': 'tb-data'},
-                                        attribute_value='content',
-                                        headers_name='x-csrf-token')
-        transform = lambda x: json.loads(x).get('csrfToken')  # noqa
-        return self._authenticate(url, params, csrf_token_data, transform)
+        return self._authenticate_with_default_settings(self.urls.regional_single_sign_on_home)
+
+    def get_cloudformation_authenticated_session(self):
+        """Authenticates to cloudformation and returns an authenticated session.
+
+        Returns:
+            session (AwsSession): An authenticated session with headers and cookies set.
+
+        """
+        session = self._authenticate_with_default_settings(self.urls.regional_cloudformation_home)
+        # Authorization: AWS4-HMAC-SHA256 Credential=ASIAR5SEAWIDACLHP224/20230825/eu-west-1/cloudformation/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token;x-amz-user-agent, Signature=33e81e4480e3b438474da1b37d6c670f77b2be7b394299771fe89afbc2a2c48a
+        # X-Amz-Content-Sha256 3fb563d96748e13e09dec79da43734f745777cc7b4ae922cfd622475d2ecfa32
+        # X-Amz-Date 20230825T142026Z
+        # x-amz-security-token IQoJb3JpZ2luX2VjEH8aCWV1LXdlc3QtMSJHMEUCIA48E23JzQ+V3YIvx0R72U2Tphx+qTe8o0+WYYKw6SQOAiEAtlYEhx9vHEnOCfE/SgB2sOrg9SLGv77QVGnrGyWJCrQq9AIIRxACGgwxMzIyMTI4OTYyNjIiDAag3P+0EXILZu0tDCrRAsZ5xrUEvIkfkwP3x+wtc8orKQGoXZ7bR2f1+oKNkuVLJImRlchDmdCbOqmv1xnlmHDucUBcwZta7gWyaloxwuOVmM4ctrINn6xN2FbVRUWEM80CZgoWfIc/8pvRuTgHvapoKtyCUADBHJjCK0xFYWQh067ah20EVKIbvpyds5fItbG2hPhugl/CDXmNyU3g5Qaq4N/4JgczNZ9Fsqn+Ftn2qVCA8k/3NfsXIvHCLXs/h44bWhwUr9Ta2q0XdTgDZCtDo72p0/SeRc1zKrtvJyVmfkYipzxqPfBdlVXKKy5yM0tyczr4tj586/jPAFjNhRHz+fqOuErIwQpYKHk8QxyQHXMr7Hzslz2YzH+RCl7ibGJikaQfcy4rZG75jCqGx7TzQrAjsYR1FdwrQq+Gg8arGFRKjaSFuyr9q/PhunzltFVxR+poYPAR7GSsqMbyLtEw796ipwY6hwJ3i9PQcxabIDc+5lTqlF+Ok9/zuwe0HJUuW9wYtc/KWeLHB3OB/dYyv1rzJiu1DSxnjQ3Y08wM/aguWmnIi1b0edAzoC8Tf6wQcHBo1Cq8h8Y59xzf892yB/zJVRFtdykqCrvoEzeFDN+G7Dbv4HqEISnIlnRWyDnjOTHKV5VQWUn/S2fL91XmQic3SqUl0BLnRtBNfJlzgLVSgdLdOQfH5B6jrnI+GuhcT+PhQauNaen1/c6OnYnqLIEP3FoaR9c8mDHZMNXjS2b4O3y+NQ2d7UhJLY/Va7K6bv8pdfrgKFP7akxQvBAhNI9Dc+gq9xyEu4Ny/orgETDTHt1yrsy1R+bRWBC1JA==
+        # X-Amz-User-Agent aws-sdk-js/2.1347.0 promise
+
+        # session.x_amz_info
+        # XAmz(
+        #     security_token='IQoJb3JpZ2luX2VjEH4aCWV1LXdlc3QtMSJHMEUCIQCSTy9ZdQRXm7ZaLrpl48w34LTlSr3kWw9+R5L+KBPv9QIgB3qR0ugxcyNOdrGOzMSC2ZqtateBYwB70b1vEJtgSO4qigIIRxABGgw0MDE2MzUzODMwOTEiDG0skzyvyu+r0izBsSrnAZEATpGU3uUFusRXiNfRKM0aU5IUdZvKypPICBtr/rhoJ3f0AM+MrpOteHrb6WuQ2je/0n/c3KL5Bl3tMAp7Qird795lsCkuvZureR/nYTCbAIcXJrrSrCNALrrd2bxeHxTulKMyGnWIt+VvMvTHmuoLU2tAsuPZ0qEvi/ivHODYguj2rI/BY10NsAVMsEIwCkAjSOkenl4xAmphy7gw0kWWPqvhZvULe7v5RDJyV9Le3uYkQx0+WRCv34mzhjBWCWpvNkVrEIiFUm29krHcjDW/qgbAFtafEn/WLh22E++nv2bZm8EjEjCV6aKnBjqPAQXOk0kZXQxEFyYshtfuPRShRspIsOnVuniTLhkLmOFXXKv4HXosmk369E0PITVAWshOAQ0adb+ZuPJ2vNjjqn60sTmRtIVKT6oyz1QghaJltHRfz7CDrqjIz+Xr2afO0w1w1VS+NlljGavEwJbORWTFNquGEpTgEU0x0YyPcfDNNOoQ/JJLW81fK3fN5qNE',
+        #     date='20230825T141823Z',
+        #     algorithm='AWS4-HMAC-SHA256',
+        #     credential='ASIAV3A2VS4Z2I3N2GRA/20230825/eu-west-1/signin/aws4_request',
+        #     signed_headers='host',
+        #     signature='d9c678be2bd6e5d11b8395ef83b5c16588596577a37ad7ad21987edda4c40b4e')
+        session.headers.update(())
+
+    def _get_cloudformation_authenticated_console_credentials(self, session):
+        response = session.post(self.urls.regional_cloudformation_credentials)
+        if not response.ok:
+            LOGGER.error(f'Received unexpected response: {response.text} with status code {response.status_code}')
+            raise UnexpectedResponse('Unable to get a valid authenticated session for cloudformation console.')
+        return response.json()
 
     def get_billing_authenticated_session(self):
         """Authenticates to billing and returns an authenticated session.
@@ -705,19 +738,12 @@ class AssumedRoleAuthenticator(LoggerMixin):
                                         headers_name='x-awsbc-xsrf-token')
         return self._authenticate(url, params, csrf_token_data)
 
-    def get_cloudformation_authenticated_session(self):
-        """Authenticates to cloudformation and returns an authenticated session.
-
-        Returns:
-            session (AwsSession): An authenticated session with headers and cookies set.
-
-        """
-        url = self.urls.regional_cloudformation_home
+    def _authenticate_with_default_settings(self, url):
         params = {'hashArgs': '#', 'region': self.region}
         csrf_token_data = CsrfTokenData(entity_type='meta',
                                         attributes={'name': 'tb-data'},
                                         attribute_value='content',
-                                        headers_name='x-cfn-xsrf-token')
+                                        headers_name='x-csrf-token')
         transform = lambda x: json.loads(x).get('csrfToken')  # noqa
         return self._authenticate(url, params, csrf_token_data, transform)
 
@@ -725,4 +751,5 @@ class AssumedRoleAuthenticator(LoggerMixin):
         session = AwsSession()
         session.get(self.get_signed_url())
         dashboard = session.get(url, params=params)
+        session.x_amz_info = RootAuthenticator.get_x_amz_info(dashboard.history[-3].headers.get('Location'))
         return session.get_console_session(dashboard, token_data, token_transform=transform)
