@@ -193,8 +193,11 @@ class ControlTower(LoggerMixin):
         return self._region
 
     @staticmethod
-    def get_available_regions():
+    def get_available_regions(enable_gov_regions=False):
         """The regions that control tower can be active in.
+
+        Args:
+            enable_gov_regions: A boolean flag indicating whether to enable the gov regions
 
         Returns:
             regions (list): A list of strings of the regions that control tower can be active in.
@@ -205,9 +208,12 @@ class ControlTower(LoggerMixin):
         if not response.ok:
             LOGGER.error('Failed to retrieve the info')
             return []
-        return [entry.get('id', '').split(':')[1]
-                for entry in response.json().get('prices')
-                if entry.get('id').startswith('controltower')]
+        regions = [entry.get('id', '').split(':')[1]
+                   for entry in response.json().get('prices')
+                   if entry.get('id').startswith('controltower')]
+        if not enable_gov_regions:
+            regions = [region for region in regions if 'gov' not in region.lower()]
+        return regions
 
     @property
     @validate_availability
@@ -695,6 +701,7 @@ class ControlTower(LoggerMixin):
                         result.extend(get_ou_ids(org_ou.id))
                     except TypeError:
                         continue
+
         get_ou_ids(self.root_ou.id)
         return result
 
@@ -1223,7 +1230,8 @@ class ControlTower(LoggerMixin):
                custom_ou_name: str = 'Sandbox',
                regions: Optional[list] = None,
                retries: int = 10,
-               wait: int = 1) -> bool:
+               wait: int = 1,
+               enable_gov_regions=False) -> bool:
         """Deploys control tower.
 
         Returns:
@@ -1235,7 +1243,7 @@ class ControlTower(LoggerMixin):
             return True
         regions = self._validate_regions(regions or [self.region])
         region_list = [{"Region": region, "RegionConfigurationStatus": "ENABLED" if region in regions else "DISABLED"}
-                       for region in self.get_available_regions()]
+                       for region in self.get_available_regions(enable_gov_regions)]
         validation = self._pre_deploy_check()
         self.logger.debug('Got validation response %s.', validation)
         if not all(list(entry.values()).pop().get('Result') == 'SUCCESS' for entry in validation):
