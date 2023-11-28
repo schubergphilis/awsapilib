@@ -205,9 +205,11 @@ class ControlTower(LoggerMixin):
         if not response.ok:
             LOGGER.error('Failed to retrieve the info')
             return []
-        return [entry.get('id', '').split(':')[1]
-                for entry in response.json().get('prices')
-                if entry.get('id').startswith('controltower')]
+        regions = [entry.get('id', '').split(':')[1]
+                   for entry in response.json().get('prices')
+                   if all([entry.get('id').startswith('controltower'),
+                           'gov' not in entry.get('id')])]
+        return regions
 
     @property
     @validate_availability
@@ -695,6 +697,7 @@ class ControlTower(LoggerMixin):
                         result.extend(get_ou_ids(org_ou.id))
                     except TypeError:
                         continue
+
         get_ou_ids(self.root_ou.id)
         return result
 
