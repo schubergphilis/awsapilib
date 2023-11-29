@@ -229,3 +229,9 @@ History
 ------------------
 
 * Bump and loosen dependencies.
+
+
+3.1.4 (29-11-2023)
+------------------
+
+* Remove gov regions from Control Tower. Bump dependencies.
