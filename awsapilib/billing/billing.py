@@ -47,7 +47,6 @@ from .billingexceptions import (InvalidCountryCode,
                                 InvalidCurrency,
                                 ServerError)
 
-
 __author__ = '''Costas Tyfoxylos <ctyfoxylos@schubergphilis.com>'''
 __docformat__ = '''google'''
 __date__ = '''30-03-2021'''
@@ -148,26 +147,26 @@ class Tax(LoggerMixin):
         if country_code not in self.available_country_codes_eu:
             raise InvalidCountryCode(f'{country_code} provided is not valid. '
                                      f'Valid ones are {self.available_country_codes_eu}')
-        payload = {'linkedAccounts': [ {self.account_id} ],
+        payload = {'linkedAccounts': [{self.account_id}],
                    'taxRegistration': {'address': {'addressLine1': address,
-                                                    'addressLine2': None,
-                                                    'city': city,
-                                                    'countryCode': country_code,
-                                                    'postalCode': postal_code,
-                                                    'state': state,
-                                                    },
-                                        'authority': {'country': country_code,
-                                                        'state': None},
-                                        'legalName': legal_name,
-                                        'localTaxRegistration': False,
-                                        'registrationId': vat_number,
-                                        }
-        }
-        
+                                                   'addressLine2': None,
+                                                   'city': city,
+                                                   'countryCode': country_code,
+                                                   'postalCode': postal_code,
+                                                   'state': state,
+                                                   },
+                                       'authority': {'country': country_code,
+                                                     'state': None},
+                                       'legalName': legal_name,
+                                       'localTaxRegistration': False,
+                                       'registrationId': vat_number,
+                                       }
+                   }
+
         files = {
-         'details': ('blob', json.dumps(payload), 'application/json'),
+            'details': ('blob', json.dumps(payload), 'application/json'),
         }
-        
+
         url = f'{self._billing.rest_api}/taxexemption/taxregistration.v2'
         response = self._billing.session.put(url, files=files)
         if not response.ok:

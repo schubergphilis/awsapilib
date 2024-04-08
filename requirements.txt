@@ -7,11 +7,11 @@
 #
 # Please use Pipfile to update the requirements.
 #
-requests>=2.31.0
-boto3>=1.33.2
-beautifulsoup4>=4.12.2
-opnieuw>=1.2.1
+requests>=2.31.0 ; python_version >= '3.7'
+boto3>=1.34.79 ; python_version >= '3.8'
+beautifulsoup4>=4.12.3 ; python_full_version >= '3.6.0'
+opnieuw>=1.2.1 ; python_version >= '3.7'
 boto3-type-annotations>=0.3.1
-cachetools>=4.2.4
-pyotp>=2.9.0
-2captcha-python>=1.2.2
+cachetools>=4.2.4 ; python_version ~= '3.5'
+pyotp>=2.9.0 ; python_version >= '3.7'
+2captcha-python>=1.2.4 ; python_version >= '3.6'
