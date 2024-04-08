@@ -235,3 +235,9 @@ History
 ------------------
 
 * Remove gov regions from Control Tower. Bump dependencies.
+
+
+3.1.5 (08-04-2024)
+------------------
+
+* Fix billing api changes.
