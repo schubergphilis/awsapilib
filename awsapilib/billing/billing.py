@@ -33,6 +33,7 @@ Main code for billing.
 
 import logging
 import time
+import json
 from datetime import datetime, timedelta
 
 from bs4 import BeautifulSoup as Bfs
@@ -69,6 +70,7 @@ class Tax(LoggerMixin):
     def __init__(self, billing):
         self._billing = billing
         self._endpoint = f'{self._billing.rest_api}/taxexemption/heritage'
+        self._endpointV2 = f'{self._billing.rest_api}/taxexemption/heritage.v2'
         self._available_country_codes = None
 
     @property
@@ -117,8 +119,8 @@ class Tax(LoggerMixin):
         if self.inheritance == value:
             return
         self._is_editable()
-        parameters = {'heritageStatus': 'OptIn' if value else 'OptOut'}
-        response = self._billing.session.post(self._endpoint, params=parameters)
+        payload = {'heritageStatus': 'OptIn' if value else 'OptOut'}
+        response = self._billing.session.post(self._endpointV2, json=payload)
         if not response.ok:
             self.logger.error(f'Failed to retrieve inheritance state, response: {response.text}')
 
@@ -127,6 +129,8 @@ class Tax(LoggerMixin):
         response = self._billing.session.get(self._endpoint, params=parameters)
         if not response.json().get('heritageStatusEditable'):
             timestamp = response.json().get('effectiveTimestamp')
+            if not timestamp:
+                raise NonEditableSetting(f'API is not enabled: {response.json()}')
             unlock_time = (datetime.fromtimestamp(timestamp / 1000) + timedelta(minutes=15))
             wait_time = unlock_time - datetime.now()
             raise NonEditableSetting(f'API is not enabled for {wait_time} more.')
@@ -144,21 +148,28 @@ class Tax(LoggerMixin):
         if country_code not in self.available_country_codes_eu:
             raise InvalidCountryCode(f'{country_code} provided is not valid. '
                                      f'Valid ones are {self.available_country_codes_eu}')
-        payload = {'address': {'addressLine1': address,
-                               'addressLine2': None,
-                               'city': city,
-                               'countryCode': country_code,
-                               'postalCode': postal_code,
-                               'state': state,
-                               },
-                   'authority': {'country': country_code,
-                                 'state': None},
-                   'legalName': legal_name,
-                   'localTaxRegistration': False,
-                   'registrationId': vat_number,
-                   }
-        url = f'{self._billing.rest_api}/taxexemption/eu/vat/information'
-        response = self._billing.session.put(url, json=payload)
+        payload = {'linkedAccounts': [ {self.account_id} ],
+                   'taxRegistration': {'address': {'addressLine1': address,
+                                                    'addressLine2': None,
+                                                    'city': city,
+                                                    'countryCode': country_code,
+                                                    'postalCode': postal_code,
+                                                    'state': state,
+                                                    },
+                                        'authority': {'country': country_code,
+                                                        'state': None},
+                                        'legalName': legal_name,
+                                        'localTaxRegistration': False,
+                                        'registrationId': vat_number,
+                                        }
+        }
+        
+        files = {
+         'details': ('blob', json.dumps(payload), 'application/json'),
+        }
+        
+        url = f'{self._billing.rest_api}/taxexemption/taxregistration.v2'
+        response = self._billing.session.put(url, files=files)
         if not response.ok:
             self.logger.error(f'Failed to set information, response: {response.text}')
         return response.ok
@@ -230,7 +241,7 @@ class Preferences(LoggerMixin):
         if self.credit_sharing == value:
             return
         endpoint = f'{self._billing.rest_api}/sharingpreferences/setcreditsharing'
-        payload = {'creditEnabled': bool(value)}
+        payload = {'creditEnabled': bool(value), 'creditShareAccountExceptions': []}
         response = self._billing.session.put(endpoint, json=payload)
         if not response.ok:
             self.logger.error(f'Failed to retrieve credit sharing state, response: {response.text}')
@@ -243,7 +254,7 @@ class Billing(LoggerMixin):
         self.aws_authenticator = Authenticator(arn)
         self.session = self._get_authenticated_session()
         self.region = region or self.aws_authenticator.region
-        self.rest_api = 'https://console.aws.amazon.com/billing/rest/v1.0'
+        self.rest_api = 'https://us-east-1.console.aws.amazon.com/billing/rest/v1.0'
         self._sor_info_ = None
         self._payment_instrument_ids = None
         self._marketplace_id = None
